@@ -3,126 +3,117 @@ import easyocr
 import pandas as pd
 import re
 import subprocess
-import sys
 
-# 1. IDENTIFICAÇÃO DE PASTA AUTOMÁTICA
+# 1. CONFIGURAÇÃO DE AMBIENTE
+# Descobre a pasta onde o script está e entra nela
 PASTA_PROJETO = os.path.dirname(os.path.abspath(__file__))
 os.chdir(PASTA_PROJETO)
 
-PASTA_IMAGENS = PASTA_PROJETO 
 ARQUIVO_CSV = os.path.join(PASTA_PROJETO, 'meubancodedados.csv')
 LOG_PROCESSADOS = os.path.join(PASTA_PROJETO, 'processados.txt')
 
-print(f"📍 Pasta de trabalho definida para: {PASTA_PROJETO}")
-print("🚀 Inicializando IA de Rebobinagem e Conexão Nuvem...")
+print(f"🚀 Inicializando IA Especialista (Pasta: {PASTA_PROJETO})")
 
-# Inicializa o leitor da IA
+# Inicializa o leitor (Carrega os modelos de inteligência artificial)
 reader = easyocr.Reader(['pt', 'en'], gpu=False)
 
-def extrair_campos(texto):
-    t = texto.upper().replace(',', '.')
+def extrair_campos(texto_lista):
+    """Analisa o texto lido e aplica lógica de motores elétricos"""
+    # Une o texto, limpa caracteres estranhos e padroniza
+    t = " ".join(texto_lista).upper().replace(',', '.')
+    t = re.sub(r'[|\\/_"~]', ' ', t)
+    
     dados = {
         'Motor_CV': 'N/A', 'Marca': 'S/M', 'RPM': 'N/A', 'Modelo': 'S/M',
         'Polos': 'N/A', 'Tensao': 'N/A', 'Amperagem': 'N/A',
         'Passo_Princ': 'N/A', 'Espiras_Princ': 'N/A', 'Fio_Princ': 'N/A',
         'Passo_Aux': 'N/A', 'Espiras_Aux': 'N/A', 'Fio_Aux': 'N/A',
         'Amp_Teste': 'N/A', 'Rolamentos': 'N/A', 'Capacitores': 'N/A', 
-        'Peso_Kg_G': 'N/A', 'Texto_Completo': texto
+        'Peso_Kg_G': 'N/A', 'Texto_Completo': t
     }
-    
-    # --- Lógica de Extração ---
-    cv = re.search(r'(\d+[./]\d+|\d+)\s*(?:CV|HP)', t)
-    if cv: dados['Motor_CV'] = cv.group(1)
-    
-    marca = re.search(r'(WEG|SIEMENS|ABB|VOGES|KOHLBACH|EBERLE|BAMBOUZZI)', t)
-    if marca: dados['Marca'] = marca.group(1)
-    
-    rpms = re.findall(r'(\d{3,4})', t)
-    for r in rpms:
-        if 600 <= int(r) <= 3800:
-            dados['RPM'] = r
+
+    # --- MARCA ---
+    marcas = ['WEG', 'SIEMENS', 'ABB', 'VOGES', 'KOHLBACH', 'EBERLE', 'BAMBOUZZI', 'NOVA', 'GE', 'HERCULES']
+    for m in marcas:
+        if m in t:
+            dados['Marca'] = m
             break
-            
-    mod = re.search(r'(?:MOD|MODELO|TYPE)[:\s]*([\w\d.-]+)', t)
-    if mod: dados['Modelo'] = mod.group(1)
+
+    # --- RPM E POLOS (Lógica Técnica) ---
+    rpms = re.findall(r'\b(\d{3,4})\b', t)
+    for r in rpms:
+        valor = int(r)
+        if 600 <= valor <= 3700:
+            dados['RPM'] = r
+            # Determina polos automaticamente pela rotação
+            if valor > 3000: dados['Polos'] = '2'
+            elif valor > 1400: dados['Polos'] = '4'
+            elif valor > 900: dados['Polos'] = '6'
+            elif valor > 600: dados['Polos'] = '8'
+            break
+
+    # --- POTÊNCIA E TENSÃO ---
+    pot = re.search(r'(\d+[./]\d+|\d+)\s*(?:CV|HP|POT|KW)', t)
+    if pot: dados['Motor_CV'] = pot.group(1)
+
+    tensaos = re.findall(r'\b(110|127|220|254|380|440|660|760)\b', t)
+    if tensaos: dados['Tensao'] = "/".join(sorted(list(set(tensaos))))
     
-    polos = re.search(r'\b([2468])\s*(?:POLOS|P|POL)\b', t)
-    if polos: dados['Polos'] = polos.group(1)
-    
-    tensao = re.findall(r'(110|220|380|440|680)', t)
-    if tensao: dados['Tensao'] = "/".join(list(set(tensao)))
-    
-    amps = re.findall(r'(\d+[.]\d+|\d+)\s*A\b', t)
-    if amps: dados['Amperagem'] = " / ".join(amps[:4])
-    
-    p_princ = re.search(r'(?:PASSO|PRINC).*?([1-9]|1\d|20)', t)
-    if p_princ: dados['Passo_Princ'] = p_princ.group(1)
-    
-    esp_princ = re.search(r'(\d{1,6})\s*(?:ESP|ESPI)', t)
-    if esp_princ: dados['Espiras_Princ'] = esp_princ.group(1)
-    
-    fio_p = re.search(r'FIO.*?(\d{1,3}(?:\s*X\s*\d+)?)', t)
-    if fio_p: dados['Fio_Princ'] = fio_p.group(1)
-    
-    if "AUX" in t:
-        p_aux = re.search(r'AUX.*?([1-9]|1\d|20)', t)
-        if p_aux: dados['Passo_Aux'] = p_aux.group(1)
-        esp_aux = re.search(r'AUX.*?(\d{1,6})\s*ESP', t)
-        if esp_aux: dados['Espiras_Aux'] = esp_aux.group(1)
-    
-    rol = re.search(r'(6\d{3})', t)
-    if rol: dados['Rolamentos'] = rol.group(1)
-    
-    cap = re.search(r'(\d+)\s*UF', t)
-    if cap: dados['Capacitores'] = cap.group(1) + " uF"
-    
+    # --- DADOS DE REBOBINAGEM ---
+    # Fio: Busca bitolas (AWG) e fios em paralelo (ex: 2x21)
+    fios = re.findall(r'(?:FIO|AWG)?\s*(\d{1,2}(?:\s*[X\+]\s*\d+)?)\b', t)
+    fios_v = [f.replace(" ", "") for f in fios if "X" in f or (f.isdigit() and 10 <= int(f) <= 35)]
+    if fios_v:
+        dados['Fio_Princ'] = fios_v[0]
+        if len(fios_v) > 1: dados['Fio_Aux'] = fios_v[1]
+
+    # Passo e Espiras (Pega os dois primeiros que encontrar)
+    passos = re.findall(r'(?:PASSO|PA|PAS)\s*(\d{1,2})', t)
+    if passos: 
+        dados['Passo_Princ'] = passos[0]
+        if len(passos) > 1: dados['Passo_Aux'] = passos[1]
+
+    espiras = re.findall(r'(\d{1,3})\s*(?:ESP|ESPI|COND)', t)
+    if espiras:
+        dados['Espiras_Princ'] = espiras[0]
+        if len(espiras) > 1: dados['Espiras_Aux'] = espiras[1]
+
     return dados
 
 def enviar_para_site():
-    """Faz o upload automático para o GitHub de forma robusta"""
+    """Sincroniza os dados com o GitHub"""
     try:
-        print("☁️ Enviando novos dados para o site...")
-        # 1. Adiciona TUDO (o ponto resolve o erro de untracked files)
+        print("☁️ Sincronizando com o GitHub...")
         subprocess.run(["git", "add", "."], check=True, shell=True)
-        
-        # 2. Tenta fazer o commit
-        result = subprocess.run(["git", "commit", "-m", "Atualizacao automatica: Novo motor"], capture_output=True, text=True, shell=True)
-        
-        # Se não houver nada novo de verdade, o Git retorna erro, vamos tratar:
-        if "nothing to commit" in result.stdout or "nothing added to commit" in result.stdout:
-            print("ℹ️ Tudo já está atualizado no servidor.")
+        res = subprocess.run(["git", "commit", "-m", "IA Update: Dados de Motores"], capture_output=True, text=True, shell=True)
+        if "nothing to commit" in res.stdout:
+            print("ℹ️ Tudo atualizado.")
             return
-
-        # 3. PUXA novidades do site
         subprocess.run(["git", "pull", "origin", "master", "--rebase"], check=True, shell=True)
-        
-        # 4. ENVIA para o GitHub
         subprocess.run(["git", "push", "origin", "master"], check=True, shell=True)
-        
-        print("✅ SUCESSO! Site atualizado.")
+        print("✅ SUCESSO! Dados enviados.")
     except Exception as e:
-        print(f"❌ Erro no upload: {e}")
+        print(f"❌ Erro de conexão: {e}")
 
 def executar():
     if not os.path.exists(LOG_PROCESSADOS): open(LOG_PROCESSADOS, 'w').close()
     with open(LOG_PROCESSADOS, 'r') as f: processados = set(line.strip() for line in f)
     
-    arquivos = [f for f in os.listdir(PASTA_IMAGENS) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    formatos = ('.png', '.jpg', '.jpeg')
+    arquivos = [f for f in os.listdir(PASTA_PROJETO) if f.lower().endswith(formatos)]
     novos = [f for f in arquivos if f not in processados]
 
     if not novos:
-        print("☕ Nada novo para processar.")
-        # Mesmo se não houver foto nova, vamos tentar subir o CSV caso ele tenha mudado
+        print("☕ Nenhuma foto nova encontrada.")
         enviar_para_site()
         return
 
-    teve_mudanca = False
+    mudou = False
     for foto in novos:
-        caminho = os.path.join(PASTA_IMAGENS, foto)
-        print(f"🔍 Analisando: {foto}...")
+        print(f"🔍 Analisando motor: {foto}...")
         try:
-            resultado = reader.readtext(caminho, detail=0)
-            campos = extrair_campos(" ".join(resultado))
+            resultado = reader.readtext(foto, detail=0)
+            campos = extrair_campos(resultado)
             campos['Arquivo'] = foto
             
             df = pd.DataFrame([campos])
@@ -137,11 +128,11 @@ def executar():
             df[ordem].to_csv(ARQUIVO_CSV, mode='a', index=False, header=header, encoding='utf-8-sig', sep=';')
             
             with open(LOG_PROCESSADOS, 'a') as f: f.write(f"{foto}\n")
-            teve_mudanca = True
+            mudou = True
         except Exception as e:
-            print(f"❌ Erro ao ler foto {foto}: {e}")
+            print(f"❌ Erro ao ler {foto}: {e}")
 
-    if teve_mudanca:
+    if mudou:
         enviar_para_site()
 
 if __name__ == "__main__":
