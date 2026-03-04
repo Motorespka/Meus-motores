@@ -17,32 +17,34 @@ st.sidebar.markdown("<h2 style='color: #f1c40f;'>🔐 Acesso Admin</h2>", unsafe
 senha_admin = st.sidebar.text_input("Senha", type="password")
 e_admin = (senha_admin == "pablo123")
 
-# --- ESTILO CSS PARA CONTRASTE MÁXIMO ---
+# --- ESTILO CSS PARA CONTRASTE E CORES ---
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; }
-    
-    /* Forçar Branco em Tudo */
-    h1, h2, h3, p, span, li, label, .stMarkdown {
-        color: #FFFFFF !important;
-        text-shadow: 1px 1px 2px black;
-    }
-    
-    /* Amarelo para Destaques */
+    h1, h2, h3, p, span, li, label, .stMarkdown { color: #FFFFFF !important; }
     strong, b { color: #f1c40f !important; }
     
-    /* Estilo do Expander (Caixa do Motor) */
+    /* Estilo do Expander */
     .streamlit-expanderHeader {
         background-color: #1e2130 !important;
         color: #f1c40f !important;
         border: 1px solid #34495e !important;
+        font-size: 1.2rem !important;
     }
     
-    /* Inputs Brancos para leitura fácil */
+    /* Inputs Brancos */
     input { background-color: #ffffff !important; color: #000000 !important; }
     
-    /* Ajuste para o texto dentro do expander não sumir */
-    .st-expanderContent { color: white !important; }
+    /* Caixa de Ligação com destaque */
+    .caixa-ligacao {
+        background-color: #f1c40f;
+        color: #000000 !important;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: bold;
+        text-align: center;
+        margin-top: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -57,41 +59,52 @@ tabs = st.tabs(abas)
 
 # --- ABA 1: CONSULTA ---
 with tabs[0]:
-    busca = st.text_input("🔍 Procure por Marca, CV ou Modelo...")
+    busca = st.text_input("🔍 Buscar motor...")
     
     if os.path.exists(ARQUIVO_CSV):
-        # Carrega o banco e limpa valores vazios
+        # Carrega e substitui "None" ou vazios por "---"
         df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig').fillna("---")
+        df = df.replace("None", "---")
         
-        if busca:
-            df_filtrado = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)]
-        else:
-            df_filtrado = df
+        df_filtrado = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)] if busca else df
 
         for idx, row in df_filtrado.iterrows():
             with st.expander(f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV"):
                 c1, c2, c3 = st.columns(3)
+                
                 with c1:
                     st.markdown(f"**RPM:** {row.get('RPM')}")
                     st.markdown(f"**Polos:** {row.get('Polaridade')}")
-                    st.markdown(f"**Voltagem:** {row.get('Voltagem')}")
-                    st.markdown(f"**Amperagem:** {row.get('Amperagem')}")
+                    # Lógica da barra na Voltagem e Amperagem
+                    v = str(row.get('Voltagem'))
+                    a = str(row.get('Amperagem'))
+                    st.markdown(f"**Voltagem:** {v}")
+                    st.markdown(f"**Amperagem:** {a}")
+                
                 with c2:
-                    st.markdown(f"**Fio Principal:** {row.get('Fio_Principal')}")
-                    st.markdown(f"**Fio Auxiliar:** {row.get('Fio_Auxiliar')}")
+                    # Organização em cascata: Grupo em cima, Fio em baixo
+                    st.markdown("---")
+                    st.markdown(f"**Bobina Principal:**\n\n{row.get('Bobina_Principal')}")
+                    st.markdown(f"**Fio Principal:**\n\n{row.get('Fio_Principal')}")
+                    st.markdown("---")
+                    st.markdown(f"**Bobina Auxiliar:**\n\n{row.get('Bobina_Auxiliar')}")
+                    st.markdown(f"**Fio Auxiliar:**\n\n{row.get('Fio_Auxiliar')}")
+                
+                with c3:
                     st.markdown(f"**Capacitor:** {row.get('Capacitor')}")
                     st.markdown(f"**Rolamentos:** {row.get('Rolamentos')}")
-                with c3:
                     st.markdown(f"**Eixo X:** {row.get('Eixo_X')}")
                     st.markdown(f"**Eixo Y:** {row.get('Eixo_Y')}")
-                    st.markdown(f"<div style='background: #f1c40f; color: black; padding: 5px; border-radius: 5px; font-weight: bold;'>🔗 LIGAÇÕES: {row.get('Esquema_Marcado')}</div>", unsafe_allow_html=True)
+                    
+                    lig = row.get('Esquema_Marcado')
+                    st.markdown(f"<div class='caixa-ligacao'>🔗 LIGAÇÕES: {lig}</div>", unsafe_allow_html=True)
                 
                 if e_admin:
-                    if st.button(f"🗑️ Excluir {idx}", key=f"del_{idx}"):
+                    if st.button(f"🗑️ Excluir Motor", key=f"del_{idx}"):
                         df.drop(idx).to_csv(ARQUIVO_CSV, index=False, sep=';', encoding='utf-8-sig')
                         st.rerun()
 
-# --- ABA 2: CADASTRO (SÓ ADMIN) ---
+# --- ABA 2: CADASTRO (ADMIN) ---
 if e_admin:
     with tabs[1]:
         st.subheader("📝 Cadastrar Dados do Motor")
@@ -101,50 +114,52 @@ if e_admin:
                 marca = st.text_input("Marca do Motor")
                 potencia = st.text_input("Potência (CV)")
                 rpm = st.text_input("RPM")
-                polos = st.selectbox("Polaridade (Polos)", ["2", "4", "6", "8", "12"])
-                amp = st.text_input("Amperagem (A)")
+                polos = st.selectbox("Polaridade", ["2", "4", "6", "8", "12"])
+                st.info("Dica: Use '/' para separar (ex: 110/220)")
                 volt = st.text_input("Voltagem (V)")
+                amp = st.text_input("Amperagem (A)")
             with col2:
+                b_p = st.text_input("Bobina Principal (Grupo)")
                 f_p = st.text_input("Fio Principal")
+                b_a = st.text_input("Bobina Auxiliar (Grupo)")
                 f_a = st.text_input("Fio Auxiliar")
                 cap = st.text_input("Capacitor")
                 rol = st.text_input("Rolamentos")
-                b_p = st.text_input("Bobina Princ. (Espiras)")
-                b_a = st.text_input("Bobina Aux. (Espiras)")
             with col3:
                 ex = st.text_input("Tamanho Eixo X")
                 ey = st.text_input("Tamanho Eixo Y")
-                st.write("Marque as Ligações:")
+                st.write("**Ligações:**")
                 l1 = st.checkbox("Estrela (Y)")
                 l2 = st.checkbox("Triângulo (Δ)")
                 l3 = st.checkbox("Série")
                 l4 = st.checkbox("Paralelo")
 
-            if st.form_submit_button("💾 SALVAR DADOS NO BANCO"):
+            if st.form_submit_button("💾 SALVAR NO BANCO"):
                 ligs = []
                 if l1: ligs.append("Estrela")
                 if l2: ligs.append("Triângulo")
                 if l3: ligs.append("Série")
                 if l4: ligs.append("Paralelo")
                 
-                novo_dado = {
+                novo = {
                     'Marca': marca, 'Potencia_CV': potencia, 'RPM': rpm, 'Polaridade': polos,
-                    'Amperagem': amp, 'Voltagem': volt, 'Fio_Principal': f_p, 'Fio_Auxiliar': f_a,
+                    'Voltagem': volt, 'Amperagem': amp, 
+                    'Bobina_Principal': b_p, 'Fio_Principal': f_p,
+                    'Bobina_Auxiliar': b_a, 'Fio_Auxiliar': f_a,
                     'Capacitor': cap, 'Rolamentos': rol, 'Eixo_X': ex, 'Eixo_Y': ey,
-                    'Esquema_Marcado': ", ".join(ligs) if ligs else "Nenhuma"
+                    'Esquema_Marcado': ", ".join(ligs) if ligs else "---"
                 }
-                
-                df_novo = pd.DataFrame([novo_dado])
-                df_novo.to_csv(ARQUIVO_CSV, mode='a', header=not os.path.exists(ARQUIVO_CSV), index=False, sep=';', encoding='utf-8-sig')
-                st.success("✅ Motor cadastrado com sucesso!")
+                pd.DataFrame([novo]).to_csv(ARQUIVO_CSV, mode='a', header=not os.path.exists(ARQUIVO_CSV), index=False, sep=';', encoding='utf-8-sig')
+                st.success("✅ Motor salvo!")
 
-    # --- ABA 3: ESQUEMAS (SÓ ADMIN) ---
+# --- ABA 3: ESQUEMAS ---
+if e_admin:
     with tabs[2]:
-        st.subheader("🖼️ Galeria de Esquemas (Zoom)")
+        st.subheader("🖼️ Galeria de Esquemas")
         up = st.file_uploader("Upload do Paint", type=['png', 'jpg'])
         if up:
-            nome_f = st.text_input("Nome do arquivo")
-            if st.button("Salvar Foto"):
+            nome_f = st.text_input("Nome do esquema")
+            if st.button("Gravar"):
                 Image.open(up).save(os.path.join(PASTA_ESQUEMAS, f"{nome_f}.png"))
                 st.rerun()
         
@@ -152,6 +167,6 @@ if e_admin:
         fotos = [f for f in os.listdir(PASTA_ESQUEMAS) if f.endswith(('.png', '.jpg'))]
         if fotos:
             escolha = st.selectbox("Abrir desenho:", fotos)
-            st.image(os.path.join(PASTA_ESQUEMAS, escolha), caption="Clique nas setas no canto da imagem para Zoom", use_container_width=True)
+            st.image(os.path.join(PASTA_ESQUEMAS, escolha), use_container_width=True)
 
 st.markdown("<br><p style='text-align:center; color:#555;'>Pablo Motores © 2026</p>", unsafe_allow_html=True)
