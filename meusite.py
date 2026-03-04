@@ -1,4 +1,3 @@
-Python
 import streamlit as st
 import pandas as pd
 import os
@@ -201,4 +200,5 @@ elif escolha == "🗑️ LIXEIRA" and e_admin:
                 st.warning("O arquivo do banco de dados foi apagado.")
                 st.cache_data.clear()
                 st.rerun()
+
 
