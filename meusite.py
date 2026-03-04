@@ -1,11 +1,33 @@
 import streamlit as st
 import pandas as pd
 import os
+import google.generativeai as genai
+from PIL import Image
+
+# --- CONFIGURAÇÃO DA IA (GEMINI) ---
+CHAVE_API = "AIzaSyDM8hUnNRwHz273er2BcqQwTIcPQmKECC0"
+genai.configure(api_key=CHAVE_API)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Configuração da página para celular
 st.set_page_config(page_title="Oficina Pablo - Motores", layout="wide")
 
 st.title("🔌 Consulta de Motores - Oficina Pablo")
+
+# --- NOVIDADE: LEITURA POR FOTO ---
+st.markdown("### 📸 Leitura Automática")
+foto = st.camera_input("Tire foto da placa do motor")
+
+texto_da_foto = ""
+if foto:
+    with st.spinner('O Gemini está lendo a placa...'):
+        img = Image.open(foto)
+        # Instrução para a IA focar no que importa na oficina
+        prompt = "Extraia apenas os dados principais desta placa de motor: Marca, CV e RPM. Seja direto."
+        response = model.generate_content([prompt, img])
+        texto_da_foto = response.text
+        st.success(f"Identificado: {texto_da_foto}")
+
 st.markdown("---")
 
 # O nome do arquivo deve ser exatamente o que o seu PC envia
@@ -13,20 +35,21 @@ ARQUIVO_CSV = 'meubancodedados.csv'
 
 if os.path.exists(ARQUIVO_CSV):
     try:
-        # Lendo o banco de dados enviado pelo PC
         df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
         
-        busca = st.text_input("🔍 Buscar por Marca, CV ou Fio")
+        # Se a foto leu algo, o campo de busca já vem preenchido!
+        valor_busca = texto_da_foto if texto_da_foto else ""
+        busca = st.text_input("🔍 Buscar por Marca, CV ou Fio", value=valor_busca)
         
-        # Lógica de busca simples
         if busca:
-            df_filtrado = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)]
+            # Busca inteligente que ignora maiúsculas/minúsculas
+            mask = df.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
+            df_filtrado = df[mask]
         else:
             df_filtrado = df
 
-        st.write(f"Exibindo **{len(df_filtrado)}** motores cadastrados.")
+        st.write(f"Exibindo **{len(df_filtrado)}** motores encontrados.")
 
-        # Exibição dos motores em "cards" expansíveis (ótimos para celular)
         for index, row in df_filtrado.iterrows():
             titulo = f"📦 {row.get('Marca', 'S/M')} | {row.get('Motor_CV', 'N/A')} CV"
             with st.expander(titulo):
