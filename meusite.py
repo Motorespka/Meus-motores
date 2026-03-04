@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 import pandas as pd
 import os
 import google.generativeai as genai
@@ -71,4 +71,3 @@ if os.path.exists(ARQUIVO_CSV):
         st.error(f"Erro ao carregar dados: {e}")
 else:
     st.info("Aguardando o primeiro envio de dados do PC da oficina...")
-
