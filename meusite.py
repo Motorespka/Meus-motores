@@ -19,27 +19,31 @@ TABELA_AWG_TECNICA = {
 
 # --- 2. FUNÇÕES DE CÁLCULO E PERFORMANCE ---
 def calcular_area_mm2(texto_fio):
+    """Calcula a área total baseado no texto (ex: 2x18)"""
     try:
         if not texto_fio or str(texto_fio) == "None": return 0.0
         texto = str(texto_fio).lower().replace('awg', '').strip()
         if 'x' in texto:
-            qtd, bitola = texto.split('x')
-            return int(re.findall(r'\d+', qtd)[0]) * TABELA_AWG_TECNICA.get(bitola.strip(), 0.0)
+            partes = texto.split('x')
+            qtd = int(re.findall(r'\d+', partes[0])[0])
+            bitola = partes[1].strip()
+            return qtd * TABELA_AWG_TECNICA.get(bitola, 0.0)
         bitolas = re.findall(r'\d+', texto)
         return TABELA_AWG_TECNICA.get(bitolas[0], 0.0) if bitolas else 0.0
     except: return 0.0
 
 def gerar_opcoes_calculadas(area_alvo):
+    """Varre a tabela AWG e sugere combinações seguras e arriscadas"""
     sugestoes = []
     if area_alvo <= 0: return []
     for bitola, area_u in TABELA_AWG_TECNICA.items():
         for qtd in range(1, 5):
             area_sim = area_u * qtd
             diff = ((area_sim - area_alvo) / area_alvo) * 100
-            if -15.0 <= diff <= 15.0:
-                if abs(diff) <= 2.5: cor, status = "#2ecc71", "SEGURA"
-                elif 2.5 < diff <= 8.0 or -8.0 <= diff < -2.5: cor, status = "#f1c40f", "ALERTA"
-                else: cor, status = "#e74c3c", "ARRISCADA"
+            if -12.0 <= diff <= 12.0:
+                if abs(diff) <= 2.5: cor, status = "#2ecc71", "SEGURA (Verde)"
+                elif 2.5 < diff <= 7.0 or -7.0 <= diff < -2.5: cor, status = "#f1c40f", "ALERTA (Amarelo)"
+                else: cor, status = "#e74c3c", "ARRISCADA (Vermelho)"
                 sugestoes.append({'fio': f"{qtd}x{bitola} AWG", 'diff': diff, 'cor': cor, 'status': status})
     return sorted(sugestoes, key=lambda x: abs(x['diff']))
 
@@ -55,28 +59,19 @@ def carregar_dados():
 def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False, sep=';', encoding='utf-8-sig')
 
-st.set_page_config(page_title="Pablo Motores", layout="wide")
+# --- 4. INTERFACE ---
+st.set_page_config(page_title="Pablo Motores Pro", layout="wide")
 
-# --- LOGIN (Simplificado para o exemplo) ---
-if 'user_data' not in st.session_state:
-    st.session_state['user_data'] = None
-
-if not st.session_state['user_data']:
-    # [Lógica de formulário de login aqui...]
-    st.session_state['user_data'] = {'usuario': 'admin', 'perfil': 'admin'} # Remova esta linha no seu código real
-    st.rerun()
-
-else:
+# (Aqui você mantém seu código de login exatamente como está)
+# Para este exemplo, consideraremos que o usuário já está logado
+if 'user_data' in st.session_state and st.session_state['user_data']:
     user = st.session_state['user_data']
-    e_admin = (user['perfil'] == 'admin')
+    e_admin = (user.get('perfil') == 'admin')
     
-    with st.sidebar:
-        menu = ["🔍 CONSULTA"]
-        if e_admin: menu += ["➕ NOVO CADASTRO", "🗑️ LIXEIRA"]
-        escolha = st.radio("Menu", menu)
+    escolha = st.sidebar.radio("Navegação:", ["🔍 CONSULTA", "➕ NOVO CADASTRO", "🗑️ LIXEIRA"])
 
     if escolha == "🔍 CONSULTA":
-        st.title("🔍 Consulta Técnica")
+        st.title("⚙️ Consulta e Engenharia")
         df = carregar_dados()
         busca = st.text_input("Buscar motor...")
 
@@ -85,41 +80,54 @@ else:
             df_f = df[df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)] if busca else df
 
             for idx, row in df_f.iterrows():
-                area_orig = calcular_area_mm2(row.get('Fio_Principal'))
+                area_base = calcular_area_mm2(row.get('Fio_Principal'))
                 
                 with st.expander(f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV"):
                     c1, c2 = st.columns([2, 1])
                     with c1:
-                        st.write(f"**Fio Original:** {row.get('Fio_Principal')} ({area_orig:.3f} mm²)")
-                        st.write(f"**Esquema:** {row.get('Esquema_Marcado', 'N/A')}")
+                        st.write(f"**Fio de Fábrica:** {row.get('Fio_Principal')} ({area_base:.3f} mm²)")
+                        st.write(f"**Mecânica:** Rolamentos {row.get('Rolamentos')} | Eixo {row.get('Eixo_X')}")
                     
                     with c2:
-                        # Abre/Fecha abas
-                        if st.button("🔄 ALTERAR", key=f"alt_btn_{idx}"):
+                        if st.button("🔄 ABA ALTERAR", key=f"alt_{idx}"):
                             st.session_state[f"aba_alt_{idx}"] = not st.session_state.get(f"aba_alt_{idx}", False)
+                        
                         if e_admin:
-                            if st.button("📝 EDITAR", key=f"ed_btn_{idx}"):
+                            if st.button("📝 EDITAR ORIGINAL", key=f"ed_{idx}"):
                                 st.session_state[f"aba_ed_{idx}"] = not st.session_state.get(f"aba_ed_{idx}", False)
 
-                    # --- ABA ALTERAR (SUGESTÕES) ---
+                    # --- ABA ALTERAR (SUGESTÕES AUTOMÁTICAS) ---
                     if st.session_state.get(f"aba_alt_{idx}"):
-                        st.info("💡 Opções calculadas automaticamente:")
-                        opcoes = gerar_opcoes_calculated(area_orig)
-                        for op in opcoes[:8]:
-                            st.markdown(f"<div style='border-left:5px solid {op['cor']}; padding:5px; margin-bottom:5px; background:#f0f2f6; color:black;'><b>{op['fio']}</b> ({op['diff']:.2f}%) - {op['status']}</div>", unsafe_allow_html=True)
-                        if st.button("Fechar Sugestões", key=f"close_alt_{idx}"):
+                        st.markdown("---")
+                        st.subheader("🛠️ Opções de Rebobinagem (Cópia)")
+                        opcoes = gerar_opcoes_calculadas(area_base)
+                        for op in opcoes[:10]:
+                            st.markdown(f"""
+                                <div style="border-left: 10px solid {op['cor']}; background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 5px; color: black;">
+                                    <b>{op['fio']}</b> ({op['diff']:.2f}%) - <span style="color:{op['cor']};"><b>{op['status']}</b></span>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        if st.button("Fechar Aba", key=f"cls_alt_{idx}"):
                             st.session_state[f"aba_alt_{idx}"] = False
                             st.rerun()
 
-                    # --- ABA EDITAR (SALVA E FECHA) ---
+                    # --- ABA EDITAR (SALVA E FECHA TUDO) ---
                     if e_admin and st.session_state.get(f"aba_ed_{idx}"):
-                        with st.form(f"form_ed_{idx}"):
-                            st.warning("Editando Original")
-                            novo_fio = st.text_input("Novo Fio", value=row.get('Fio_Principal'))
+                        st.markdown("---")
+                        with st.form(f"f_ed_{idx}"):
+                            st.warning("⚠️ ALTERANDO BANCO DE DADOS ORIGINAL")
+                            n_fio = st.text_input("Fio Principal", value=row.get('Fio_Principal'))
+                            n_amp = st.text_input("Amperagem", value=row.get('Amperagem'))
+                            
                             if st.form_submit_button("SALVAR E FECHAR"):
-                                df.at[idx, 'Fio_Principal'] = novo_fio
+                                # Atualiza o DataFrame
+                                df.at[idx, 'Fio_Principal'] = n_fio
+                                df.at[idx, 'Amperagem'] = n_amp
                                 salvar_dados(df)
-                                # Lógica para fechar: limpamos o estado e damos rerun
+                                
+                                # Limpa os estados das abas para elas fecharem no próximo ciclo
                                 st.session_state[f"aba_ed_{idx}"] = False
-                                st.success("Salvo com sucesso!")
+                                st.session_state[f"aba_alt_{idx}"] = False
+                                
+                                st.success("Dados salvos com sucesso!")
                                 st.rerun()
