@@ -2,45 +2,44 @@ import streamlit as st
 import pandas as pd
 import os
 
-# 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Inventário de Motores", layout="centered")
+st.set_page_config(page_title="Oficina Pablo - Motores", layout="wide")
 
-st.title("🔌 Painel de Motores")
+st.title("🔌 Painel de Rebobinagem e Motores")
+st.markdown("---")
 
-# 2. NOME DO ARQUIVO
-# Se estiver no PC, use o caminho completo: r'C:\Users\pablo\Desktop\tentativa site motore\meubancodedados.csv'
-# Se estiver no GitHub/Nuvem, use apenas: 'meubancodedados.csv'
 ARQUIVO_CSV = 'meubancodedados.csv' 
 
-# 3. LÓGICA DO SITE
 if os.path.exists(ARQUIVO_CSV):
-    # Carrega os dados
-    df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
+    try:
+        df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
+        busca = st.text_input("🔍 Buscar por Marca, Modelo ou CV")
+        
+        df_filtrado = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)] if busca else df
 
-    # Campo de busca rápida
-    busca = st.text_input("🔍 Buscar Modelo ou Marca")
-    
-    # Filtra os dados conforme você digita
-    if busca:
-        mask = df.apply(lambda row: busca.lower() in str(row).lower(), axis=1)
-        df_filtrado = df[mask]
-    else:
-        df_filtrado = df
+        st.write(f"Exibindo **{len(df_filtrado)}** motor(es)")
 
-    st.write(f"Exibindo **{len(df_filtrado)}** motor(es)")
-
-    # Exibe cada motor em um "Card" (melhor para a tela do celular)
-    for index, row in df_filtrado.iterrows():
-        with st.expander(f"📦 {row['Marca']} - {row['Modelo']}"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**RPM:** {row['RPM']}")
-                st.write(f"**Tensão:** {row['Tensao']}")
-            with col2:
-                st.write(f"**Amperagem:** {row['Amperagem']}")
-            
-            st.markdown("---")
-            st.caption("Texto extraído da placa:")
-            st.text(row['Texto_Completo'])
+        for index, row in df_filtrado.iterrows():
+            titulo = f"📦 {row.get('Marca', 'S/M')} | {row.get('Motor_CV', 'N/A')} CV | {row.get('Modelo', 'S/M')}"
+            with st.expander(titulo):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown("### 📋 Placa")
+                    st.write(f"**RPM:** {row.get('RPM', 'N/A')} | **Polos:** {row.get('Polos', 'N/A')}")
+                    st.write(f"**Tensão:** {row.get('Tensao', 'N/A')}")
+                    st.write(f"**Amp:** {row.get('Amperagem', 'N/A')}")
+                with c2:
+                    st.markdown("### 🛠️ Principal")
+                    st.write(f"**Passo:** {row.get('Passo_Princ', 'N/A')}")
+                    st.write(f"**Espiras:** {row.get('Espiras_Princ', 'N/A')}")
+                    st.write(f"**Fio:** {row.get('Fio_Princ', 'N/A')}")
+                with c3:
+                    st.markdown("### ⚡ Aux/Outros")
+                    st.write(f"**Passo Aux:** {row.get('Passo_Aux', 'N/A')}")
+                    st.write(f"**Capacitor:** {row.get('Capacitores', 'N/A')}")
+                    st.write(f"**Rolam.:** {row.get('Rolamentos', 'N/A')}")
+                
+                st.caption(f"Texto extraído: {row.get('Texto_Completo', '')[:100]}...")
+    except Exception as e:
+        st.error(f"Erro: {e}")
 else:
-    st.error(f"Arquivo '{ARQUIVO_CSV}' não encontrado. Verifique se o nome está correto!")
+    st.warning("Aguardando upload do primeiro motor...")
