@@ -2,7 +2,7 @@ streamlit
 google-generativeai
 Pillow
 pandas
-tesseract-ocr
+
 
 
 
