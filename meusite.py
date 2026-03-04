@@ -1,11 +1,3 @@
-Entendido. Para resolver o problema de a barra lateral não aparecer no celular (já que o botão de expandir some quando você esconde o header), fiz as duas alterações cruciais mantendo todo o resto do seu código intacto:
-
-Mudei initial_sidebar_state para "expanded" (para ela já abrir direto).
-
-Removi a linha header {visibility: hidden;} do CSS (para que o ícone ">" apareça caso você feche a aba sem querer).
-
-Aqui está o código atualizado:
-
 Python
 import streamlit as st
 import pandas as pd
@@ -209,3 +201,4 @@ elif escolha == "🗑️ LIXEIRA" and e_admin:
                 st.warning("O arquivo do banco de dados foi apagado.")
                 st.cache_data.clear()
                 st.rerun()
+
