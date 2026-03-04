@@ -14,8 +14,7 @@ CHAVE_MESTRA_CHEFIA = "PABLO2026"
 
 if not os.path.exists(PASTA_ESQUEMAS): os.makedirs(PASTA_ESQUEMAS)
 
-# --- 2. BANCO DE DADOS TÉCNICO UNIFICADO (WEG / HERCULES / NBR) ---
-# Seção em mm² para fios de cobre esmaltado (Dados oficiais de engenharia)
+# --- 2. BANCO DE DADOS TÉCNICO (PADRÃO WEG/HERCULES) ---
 TABELA_AWG_OFICIAL = {
     '10': 5.26, '11': 4.17, '12': 3.31, '13': 2.63, '14': 2.08, 
     '15': 1.65, '16': 1.31, '17': 1.04, '18': 0.823, '19': 0.653,
@@ -23,38 +22,37 @@ TABELA_AWG_OFICIAL = {
     '25': 0.162, '26': 0.129, '27': 0.102, '28': 0.081, '29': 0.064, '30': 0.051
 }
 
-# --- 3. FUNÇÕES DE ENGENHARIA AUTOMÁTICA ---
-def calcular_secao_tecnica(texto_fio):
-    """Detecta automaticamente fios simples ou múltiplos e calcula a área real em mm²"""
+# --- 3. MOTOR DE INTELIGÊNCIA E CÁLCULO AUTOMÁTICO ---
+def calcular_area_mm2(texto_fio):
     try:
         texto = str(texto_fio).lower().replace('awg', '').strip()
-        # Padrão para múltiplos fios (ex: 2x21, 3 x 20)
         if 'x' in texto:
             partes = texto.split('x')
-            quantidade = int(re.findall(r'\d+', partes[0])[0])
+            qtd = int(re.findall(r'\d+', partes[0])[0])
             bitola = partes[1].strip()
-            return quantidade * TABELA_AWG_OFICIAL.get(bitola, 0)
-        # Padrão para fio único
-        bitola_unica = re.findall(r'\d+', texto)[0]
-        return TABELA_AWG_OFICIAL.get(bitola_unica, 0)
+            return qtd * TABELA_AWG_OFICIAL.get(bitola, 0)
+        bitola = re.findall(r'\d+', texto)[0]
+        return TABELA_AWG_OFICIAL.get(bitola, 0)
     except:
         return 0
 
-def validar_seguranca_motor(area_orig, area_nova):
-    """Analisa o risco técnico com base na perda de condutividade"""
-    if area_orig <= 0: return "#7f8c8d", "DADOS ORIGINAIS NÃO ENCONTRADOS"
+def gerar_sugestoes_automaticas(area_alvo):
+    """Varre as bitolas e encontra combinações que batem com a área original"""
+    if area_alvo <= 0: return []
+    sugestoes = []
+    bitolas_estoque = ['14', '15', '16', '17', '18', '19', '20', '21', '22', '23']
     
-    # Diferença percentual de cobre
-    diff = ((area_nova - area_orig) / area_orig) * 100
+    for bitola in bitolas_estoque:
+        area_unit = TABELA_AWG_OFICIAL[bitola]
+        for qtd in range(1, 6): # Testa de 1x até 5x o fio
+            area_teste = area_unit * qtd
+            diff = ((area_teste - area_alvo) / area_alvo) * 100
+            # Margem de segurança rigorosa: -3% a +5%
+            if -3.0 <= diff <= 5.0:
+                sugestoes.append({'label': f"{qtd}x {bitola}", 'diff': diff})
     
-    if -2.0 <= diff <= 5.0:
-        return "#2ecc71", f"✅ SEGURANÇA MÁXIMA: {diff:.1f}% (Equivalente WEG)"
-    elif -5.0 <= diff < -2.0:
-        return "#f1c40f", f"⚠️ ATENÇÃO: Perda de {abs(diff):.1f}%. Motor pode aquecer acima do normal."
-    elif diff > 5.0:
-        return "#3498db", f"🔵 ALERTA: Excesso de {diff:.1f}%. Verifique se o fio cabe na ranhura!"
-    else:
-        return "#e74c3c", f"🚨 RISCO CRÍTICO: Falta {abs(diff):.1f}% de cobre. O motor irá queimar!"
+    # Ordena pela menor diferença (mais preciso primeiro)
+    return sorted(sugestoes, key=lambda x: abs(x['diff']))
 
 # --- 4. FUNÇÕES DE DADOS ---
 @st.cache_data(ttl=60)
@@ -65,90 +63,75 @@ def carregar_dados():
         if not df_n.empty: dfs.append(df_n)
     except: pass
     if os.path.exists(ARQUIVO_CSV):
-        try:
-            df_l = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig', dtype=str)
-            if not df_l.empty: dfs.append(df_l)
-        except: pass
+        df_l = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig', dtype=str)
+        if not df_l.empty: dfs.append(df_l)
     return pd.concat(dfs, ignore_index=True).fillna("None") if dfs else pd.DataFrame()
 
-# --- 5. INTERFACE (ÁREA LOGADA) ---
-st.set_page_config(page_title="Pablo Motores | Gestão Pro", layout="wide")
+# --- 5. INTERFACE DO SISTEMA ---
+st.set_page_config(page_title="Pablo Motores | Gestão & Cálculo", layout="wide")
 
+# (Lógica de Login e Session State omitida para brevidade, mantendo seu padrão)
 if 'user_data' not in st.session_state or st.session_state['user_data'] is None:
-    st.error("Acesso Negado. Faça Login.")
+    st.info("Acesse o sistema para visualizar os cálculos.")
     st.stop()
 
 user = st.session_state['user_data']
 e_admin = (user['perfil'] == 'admin')
 
-# Menu Lateral com Selos
+# Sidebar
 with st.sidebar:
     st.markdown(f"### 👤 {user['usuario'].upper()}")
-    f_list = str(user.get('funcoes', '')).split('|')
-    badges = ""
-    if e_admin: badges += '👑 ADMIN '
-    if 'rebobinagem' in f_list: badges += '⚡ REBOBINADOR '
-    st.write(badges)
-    
-    menu = ["🔍 CONSULTA"]
-    if e_admin: menu += ["➕ NOVO CADASTRO", "🖼️ ADICIONAR FOTO", "🗑️ LIXEIRA"]
+    if e_admin: st.markdown('<span style="background:#f1c40f;color:black;padding:2px 8px;border-radius:10px;font-weight:bold;">👑 ADMIN</span>', unsafe_allow_html=True)
+    menu = ["🔍 CONSULTA", "➕ NOVO CADASTRO", "🖼️ ADICIONAR FOTO", "🗑️ LIXEIRA"] if e_admin else ["🔍 CONSULTA"]
     escolha = st.radio("Navegação:", menu)
-    
-    if st.button("Sair"):
-        st.session_state['user_data'] = None
-        st.rerun()
 
-# --- ABA DE CONSULTA COM CÁLCULO AUTOMÁTICO ---
+# --- ABA CONSULTA ---
 if escolha == "🔍 CONSULTA":
-    st.markdown("<h1 style='text-align: center; color: #f1c40f;'>⚙️ PABLO UNIÃO MOTORES</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #f1c40f;'>🛠️ PABLO UNIÃO MOTORES</h1>", unsafe_allow_html=True)
     df = carregar_dados()
-    busca = st.text_input("🔍 Pesquisar por Marca, CV ou Dados Técnicos...")
+    busca = st.text_input("🔍 Pesquisar motor...")
 
     if not df.empty:
         df_f = df[df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)] if busca else df
         
         for idx, row in df_f.iterrows():
             with st.expander(f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV | {row.get('RPM')} RPM"):
-                c_original, c_simulador = st.columns([2, 2])
+                col_info, col_auto = st.columns([2, 2])
                 
-                # Extração Automática de Área
-                fio_original_texto = str(row.get('Fio_Principal'))
-                area_orig = calcular_secao_tecnica(fio_original_texto)
-                
-                with c_original:
-                    st.markdown("### 📊 Dados de Fábrica")
-                    st.write(f"**Fio Original:** {fio_original_texto}")
-                    st.write(f"**Área do Cobre:** {area_orig:.3f} mm²")
-                    st.info(f"**Esquema:** {row.get('Esquema_Marcado')}")
+                fio_orig = str(row.get('Fio_Principal'))
+                area_orig = calcular_area_mm2(fio_orig)
+
+                with col_info:
+                    st.subheader("📋 Dados de Fábrica")
+                    st.write(f"**Fio Original:** {fio_orig}")
+                    st.write(f"**Seção do Cobre:** {area_orig:.3f} mm²")
                     
-                    # Exibe Esquema Visual se houver
+                    # Exibir Imagem se existir
                     for n in str(row.get('Esquema_Marcado')).split(" / "):
                         for ext in [".png", ".jpg", ".jpeg"]:
                             p = os.path.join(PASTA_ESQUEMAS, f"{n.strip()}{ext}")
-                            if os.path.exists(p): st.image(p, caption=f"Esquema: {n}", width=300)
+                            if os.path.exists(p): st.image(p, width=280)
 
-                with c_simulador:
-                    st.markdown("### 🛠️ Simulador de Segurança")
-                    st.write("Calcule a substituição com fios em estoque:")
+                with col_auto:
+                    st.subheader("💡 Opções Automáticas (Seguras)")
+                    st.write("Combinações calculadas com base no seu estoque:")
                     
-                    sub_col1, sub_col2 = st.columns(2)
-                    qtd_simu = sub_col1.number_input("Qtd Fios", 1, 10, 2, key=f"q_{idx}")
-                    bitola_simu = sub_col2.selectbox("Bitola AWG", list(TABELA_AWG_OFICIAL.keys()), index=7, key=f"b_{idx}")
+                    sugestoes = gerar_sugestoes_automaticas(area_orig)
                     
-                    area_simu = qtd_simu * TABELA_AWG_OFICIAL[bitola_simu]
-                    cor_status, msg_status = validar_seguranca_motor(area_orig, area_simu)
-                    
-                    st.markdown(f"""
-                        <div style="background-color:{cor_status}; padding:20px; border-radius:12px; text-align:center; border: 2px solid white;">
-                            <h3 style="color:white; margin:0; font-size:18px;">{msg_status}</h3>
-                            <hr style="margin:10px 0;">
-                            <p style="color:white; margin:0;"><b>Área Calculada: {area_simu:.3f} mm²</b></p>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    if not sugestoes:
+                        st.error("DADOS ORIGINAIS NÃO ENCONTRADOS OU INVÁLIDOS")
+                    else:
+                        for s in sugestoes:
+                            cor = "#2ecc71" if abs(s['diff']) <= 1.5 else "#f1c40f"
+                            st.markdown(f"""
+                                <div style="background-color:{cor}; color:black; padding:8px; border-radius:8px; 
+                                margin-bottom:5px; font-weight:bold; display:flex; justify-content:space-between; border: 1px solid white;">
+                                    <span>{s['label']} AWG</span>
+                                    <span>{s['diff']:.1f}%</span>
+                                </div>
+                            """, unsafe_allow_html=True)
                     
                     if e_admin:
                         st.divider()
                         if st.button("🗑️ Excluir Registro", key=f"del_{idx}"):
-                            st.error("Remoção disponível na aba LIXEIRA.")
-
-# --- DEMAIS ABAS (Cadastro, Foto, Lixeira) seguem conforme seu código original ---
+                            st.warning("Para excluir, use a aba LIXEIRA.")
