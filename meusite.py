@@ -31,4 +31,51 @@ def validar_login(usuario, senha):
     df = pd.read_csv(ARQUIVO_USUARIOS)
     senha_h = hash_senha(senha)
     user_check = df[(df['usuario'] == usuario) & (df['senha'] == senha_h)]
+    
     if not user_check.empty:
+        return user_check.iloc[0]['perfil']  # Retorna o perfil se encontrar o usuário
+    return False                             # Retorna Falso se não encontrar
+
+# --- 3. INTERFACE DE ENTRADA (PABLO UNIÃO) ---
+st.set_page_config(page_title="Pablo União", layout="centered")
+
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+
+if not st.session_state['autenticado']:
+    st.markdown("<h1 style='text-align: center; color: #f1c40f;'>🛠️ PABLO UNIÃO</h1>", unsafe_allow_html=True)
+    
+    aba_login, aba_cadastro = st.tabs(["Entrar", "Criar Conta"])
+    
+    with aba_login:
+        u_login = st.text_input("Usuário", key="u_login")
+        s_login = st.text_input("Senha", type="password", key="s_login")
+        if st.button("Acessar Sistema", use_container_width=True):
+            perfil = validar_login(u_login, s_login)
+            if perfil:
+                st.session_state['autenticado'] = True
+                st.session_state['usuario'] = u_login
+                st.session_state['perfil'] = perfil
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos.")
+                
+    with aba_cadastro:
+        u_novo = st.text_input("Novo Usuário")
+        s_nova = st.text_input("Nova Senha", type="password")
+        if st.button("Cadastrar", use_container_width=True):
+            if salvar_usuario(u_novo, s_nova):
+                st.success("Cadastro realizado! Vá para a aba 'Entrar'.")
+            else:
+                st.error("Usuário já existe.")
+    st.stop()
+
+# --- 4. ÁREA DO SISTEMA (APÓS LOGIN) ---
+st.sidebar.title("PABLO UNIÃO")
+st.sidebar.write(f"Bem-vindo, **{st.session_state['usuario']}**")
+if st.sidebar.button("Sair"):
+    st.session_state['autenticado'] = False
+    st.rerun()
+
+st.success("Você está logado no sistema Pablo União!")
+# Aqui você pode continuar com as abas de Consulta, Cadastro de Motores e Simulador.
