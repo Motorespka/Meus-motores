@@ -1,11 +1,3 @@
-Esse erro confirma o que suspeitávamos: o seu site está tentando carregar o easyocr, mas como nós o removemos do arquivo requirements.txt para destravar o site, o código do arquivo meusite.py não encontra a biblioteca e "quebra".
-
-Para resolver isso e fazer o site abrir no seu celular agora, você precisa limpar o código do site de qualquer menção à IA (já que combinamos de deixar a IA apenas no seu PC, que é mais potente).
-
-1. O que fazer agora (Passo a Passo)
-Vá ao seu GitHub, abra o arquivo meusite.py e substitua todo o conteúdo por este código simplificado. Ele serve apenas para mostrar o banco de dados que o seu PC vai alimentar:
-
-Python
 import streamlit as st
 import pandas as pd
 import os
@@ -16,6 +8,7 @@ st.set_page_config(page_title="Oficina Pablo - Motores", layout="wide")
 st.title("🔌 Consulta de Motores - Oficina Pablo")
 st.markdown("---")
 
+# O nome do arquivo deve ser exatamente o que o seu PC envia
 ARQUIVO_CSV = 'meubancodedados.csv' 
 
 if os.path.exists(ARQUIVO_CSV):
@@ -25,7 +18,7 @@ if os.path.exists(ARQUIVO_CSV):
         
         busca = st.text_input("🔍 Buscar por Marca, CV ou Fio")
         
-        # Lógica de busca
+        # Lógica de busca simples
         if busca:
             df_filtrado = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)]
         else:
@@ -33,7 +26,7 @@ if os.path.exists(ARQUIVO_CSV):
 
         st.write(f"Exibindo **{len(df_filtrado)}** motores cadastrados.")
 
-        # Exibição dos cards
+        # Exibição dos motores em "cards" expansíveis (ótimos para celular)
         for index, row in df_filtrado.iterrows():
             titulo = f"📦 {row.get('Marca', 'S/M')} | {row.get('Motor_CV', 'N/A')} CV"
             with st.expander(titulo):
