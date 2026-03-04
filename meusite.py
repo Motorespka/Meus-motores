@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
-# --- 1. TABELA TÉCNICA AWG (PRECISÃO DE ENGENHARIA) ---
+# --- 1. BANCO TÉCNICO DE ENGENHARIA (TABELA AWG DA IMAGEM) ---
 TABELA_AWG_TECNICA = {
     '4/0': 107.0, '3/0': 85.0, '2/0': 67.4, '1/0': 53.5,
     '1': 42.41, '2': 33.63, '3': 26.67, '4': 21.147, '5': 16.764,
@@ -16,7 +16,7 @@ TABELA_AWG_TECNICA = {
     '31': 0.0401, '32': 0.0324, '33': 0.0254, '34': 0.0201
 }
 
-# --- 2. FUNÇÕES DE CÁLCULO ---
+# --- 2. FUNÇÕES DE ENGENHARIA ---
 def calcular_area_mm2(texto_fio):
     try:
         if not texto_fio or str(texto_fio) == "None": return 0.0
@@ -54,14 +54,14 @@ def carregar_dados():
 def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False, sep=';', encoding='utf-8-sig')
 
-# --- 4. INTERFACE ---
+# --- 4. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Pablo Motores Pro", layout="wide")
 
 if 'user_data' not in st.session_state: st.session_state['user_data'] = None
 
-# Simulação de Login (Mantenha o seu original aqui)
+# Login Automático para teste (Substitua pela sua lógica se necessário)
 if not st.session_state['user_data']:
-    st.session_state['user_data'] = {'usuario': 'admin', 'perfil': 'admin'} 
+    st.session_state['user_data'] = {'usuario': 'admin', 'perfil': 'admin'}
     st.rerun()
 
 else:
@@ -70,13 +70,17 @@ else:
 
     with st.sidebar:
         st.title("PABLO MOTORES")
-        menu = ["🔍 CONSULTAR", "➕ NOVO", "🗑️ LIXEIRA"]
+        menu = ["🔍 CONSULTAR", "➕ NOVO MOTOR", "🗑️ LIXEIRA"]
         escolha = st.radio("Menu:", menu)
+        if st.button("Sair"):
+            st.session_state['user_data'] = None
+            st.rerun()
 
+    # --- ABA 1: CONSULTA ---
     if escolha == "🔍 CONSULTAR":
-        st.title("🔍 Consulta e Esquemas")
+        st.title("🔍 Consulta e Engenharia")
         df = carregar_dados()
-        busca = st.text_input("Buscar por Marca, CV, Fio ou RPM...")
+        busca = st.text_input("Pesquisar motor...")
 
         if not df.empty:
             df_f = df[df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)] if busca else df
@@ -93,68 +97,67 @@ else:
                         st.write(f"**Rolamentos:** {row.get('Rolamentos')}")
 
                     with c2:
-                        # BOTÕES DE INTERAÇÃO
-                        if st.button("🔄 ABA ALTERAR", key=f"alt_{idx}"):
+                        if st.button("🔄 ALTERAR", key=f"alt_{idx}"):
                             st.session_state[f"show_alt_{idx}"] = not st.session_state.get(f"show_alt_{idx}", False)
-                        if st.button("🖼️ VER FOTOS/ESQUEMAS", key=f"img_{idx}"):
+                        if st.button("🖼️ FOTOS", key=f"img_{idx}"):
                             st.session_state[f"show_img_{idx}"] = not st.session_state.get(f"show_img_{idx}", False)
 
                     with c3:
                         if e_admin:
-                            if st.button("📝 EDITAR ORIGINAL", key=f"ed_{idx}"):
+                            if st.button("📝 EDITAR", key=f"ed_{idx}"):
                                 st.session_state[f"show_ed_{idx}"] = not st.session_state.get(f"show_ed_{idx}", False)
+                            if st.button("🗑️ EXCLUIR", key=f"del_{idx}"):
+                                df.at[idx, 'status'] = 'deletado'
+                                salvar_dados(df); st.rerun()
 
-                    # --- ABA FOTOS (RESTABELECIDA) ---
+                    # --- ABA FOTOS (CORRIGIDA) ---
                     if st.session_state.get(f"show_img_{idx}"):
                         st.markdown("---")
-                        st.subheader("🖼️ Esquemas e Fotos de Campo")
-                        # Se houver link de imagem no CSV, ele carrega aqui
-                        img_url = row.get('Link_Foto', None)
-                        if img_url and img_url != "None":
-                            st.image(img_url, caption=f"Esquema {row.get('Marca')}")
+                        st.subheader("🖼️ Esquema Visual")
+                        img_url = row.get('Link_Foto', '')
+                        if img_url and str(img_url) != "nan":
+                            st.image(img_url)
                         else:
-                            st.info("Nenhuma foto cadastrada para este motor.")
-                        
+                            st.info("Sem foto cadastrada.")
 
-[Image of electric motor winding diagram]
-
-                        if st.button("Fechar Fotos", key=f"cls_img_{idx}"):
-                            st.session_state[f"show_img_{idx}"] = False; st.rerun()
-
-                    # --- ABA ALTERAR (CÁLCULOS VISUAIS) ---
+                    # --- ABA ALTERAR ---
                     if st.session_state.get(f"show_alt_{idx}"):
                         st.markdown("---")
-                        st.subheader("🛠️ Simulador de Rebobinagem")
+                        st.subheader("🛠️ Opções de Rebobinagem")
                         opcoes = gerar_opcoes_calculadas(area_base)
                         for op in opcoes[:8]:
                             st.markdown(f"<div style='border-left:8px solid {op['cor']}; background:#f8f9fa; padding:10px; margin-bottom:5px; color:black;'><b>{op['fio']}</b> ({op['diff']:.2f}%) - {op['status']}</div>", unsafe_allow_html=True)
-                        if st.button("Fechar Alteração", key=f"cls_alt_{idx}"):
-                            st.session_state[f"show_alt_{idx}"] = False; st.rerun()
 
-                    # --- ABA EDITAR (SALVA E FECHA AUTOMÁTICO) ---
+                    # --- ABA EDITAR (SALVAR E FECHAR TUDO) ---
                     if e_admin and st.session_state.get(f"show_ed_{idx}"):
                         st.markdown("---")
                         with st.form(f"form_ed_{idx}"):
-                            st.warning("⚠️ Editando dados originais")
-                            n_fio = st.text_input("Fio Principal", value=row.get('Fio_Principal'))
-                            n_amp = st.text_input("Amperagem", value=row.get('Amperagem'))
-                            n_link = st.text_input("Link da Foto/Esquema", value=row.get('Link_Foto', ''))
+                            st.warning("✍️ Editando Cadastro")
+                            # TODOS OS CAMPOS REESTABELECIDOS PARA O CÓDIGO NÃO ENCOLHER
+                            ed_fio = st.text_input("Fio Principal", value=row.get('Fio_Principal'))
+                            ed_amp = st.text_input("Amperagem", value=row.get('Amperagem'))
+                            ed_rol = st.text_input("Rolamentos", value=row.get('Rolamentos'))
+                            ed_rpm = st.text_input("RPM", value=row.get('RPM'))
+                            ed_volt = st.text_input("Voltagem", value=row.get('Voltagem'))
+                            ed_link = st.text_input("Link da Foto", value=row.get('Link_Foto', ''))
                             
-                            if st.form_submit_button("✅ SALVAR E FECHAR TUDO"):
-                                df.at[idx, 'Fio_Principal'] = n_fio
-                                df.at[idx, 'Amperagem'] = n_amp
-                                df.at[idx, 'Link_Foto'] = n_link
+                            if st.form_submit_button("✅ SALVAR E FECHAR"):
+                                df.at[idx, 'Fio_Principal'] = ed_fio
+                                df.at[idx, 'Amperagem'] = ed_amp
+                                df.at[idx, 'Rolamentos'] = ed_rol
+                                df.at[idx, 'RPM'] = ed_rpm
+                                df.at[idx, 'Voltagem'] = ed_volt
+                                df.at[idx, 'Link_Foto'] = ed_link
                                 salvar_dados(df)
-                                # Lógica para fechar a aba
+                                # Lógica para fechar todas as abas
                                 st.session_state[f"show_ed_{idx}"] = False
                                 st.session_state[f"show_alt_{idx}"] = False
                                 st.session_state[f"show_img_{idx}"] = False
-                                st.success("Atualizado com sucesso!")
                                 st.rerun()
 
-    # --- ABA NOVO (TODOS OS CAMPOS) ---
-    elif escolha == "➕ NOVO" and e_admin:
-        st.title("➕ Cadastrar Novo Motor")
+    # --- ABA NOVO MOTOR (FORMULÁRIO COMPLETO) ---
+    elif escolha == "➕ NOVO MOTOR" and e_admin:
+        st.title("➕ Novo Cadastro")
         with st.form("form_novo"):
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -163,9 +166,14 @@ else:
             with c2:
                 fp = st.text_input("Fio Principal"); gp = st.text_input("Grupo Principal")
                 fa = st.text_input("Fio Auxiliar"); ga = st.text_input("Grupo Auxiliar")
+                cp = st.text_input("Capacitor")
             with c3:
-                rol = st.text_input("Rolamentos"); ex = st.text_input("Eixo"); link = st.text_input("Link da Foto")
+                rol = st.text_input("Rolamentos"); ex_x = st.text_input("Eixo X"); ex_y = st.text_input("Eixo Y")
+                foto = st.text_input("Link da Foto")
             
             if st.form_submit_button("CADASTRAR"):
-                # Lógica de salvar completa...
-                st.success("Motor salvo!")
+                novo = {'Marca': m, 'Potencia_CV': cv, 'RPM': r, 'Voltagem': v, 'Amperagem': a,
+                        'Fio_Principal': fp, 'Bobina_Principal': gp, 'Fio_Auxiliar': fa, 'Bobina_Auxiliar': ga,
+                        'Capacitor': cp, 'Rolamentos': rol, 'Eixo_X': ex_x, 'Eixo_Y': ex_y, 'Link_Foto': foto, 'status': 'ativo'}
+                df_n = pd.concat([carregar_dados(), pd.DataFrame([novo])], ignore_index=True)
+                salvar_dados(df_n); st.success("Salvo!"); st.rerun()
