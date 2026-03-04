@@ -4,92 +4,100 @@ import os
 import google.generativeai as genai
 from PIL import Image
 
-# --- CONFIGURAÇÃO DA IA (GEMINI) ---
+# --- CONFIGURAÇÃO DA IA ---
 CHAVE_API = "AIzaSyBcwcsk-wcOGIeHZAuEoGjx4LkNQA5CCF4"
 genai.configure(api_key=CHAVE_API)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Configuração da página
-st.set_page_config(page_title="Oficina Pablo - Motores", layout="wide")
+# Configuração visual profissional
+st.set_page_config(page_title="Oficina Pablo | Rebobinagem Pro", layout="wide")
 
-# CSS para esconder a câmera em telas grandes (PCs) e melhorar o visual no celular
+# Estilização CSS personalizada
 st.markdown("""
     <style>
-    @media (min-width: 1024px) {
-        .camera-off-pc { display: none; }
-    }
-    .stButton>button { width: 100%; }
+    .main { background-color: #f5f5f5; }
+    .stHeader { background-color: #1e1e1e; color: white; padding: 1rem; border-radius: 10px; }
+    .card-motor { background-color: white; padding: 20px; border-left: 5px solid #ff4b4b; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+    @media (min-width: 1024px) { .camera-off-pc { display: none; } }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🔌 Consulta de Motores - Oficina Pablo")
+# Cabeçalho fixo
+with st.container():
+    st.markdown('<div class="stHeader"><h1>⚡ Oficina Pablo: Gestão de Rebobinagem</h1></div>', unsafe_allow_html=True)
 
-# Variável para armazenar o que foi lido na foto
-texto_da_foto = ""
+# --- SISTEMA DE LEITURA (IA) ---
+st.subheader("📸 Scan de Placa do Motor")
+col_botoes = st.columns([1, 1])
 
-# --- SEÇÃO ADICIONAR (BOTÃO) ---
-st.markdown("---")
+with col_botoes[0]:
+    if st.button("🔍 Escanear Placa com Foto"):
+        st.session_state.abrir_camera = True
 
-# No PC, mostramos um aviso. No celular, o botão funciona.
-if st.button("➕ Adicionar / Ler Placa via Foto"):
-    # Esta div ajuda o CSS a esconder o componente no PC
+if st.session_state.get('abrir_camera', False):
     st.markdown('<div class="camera-off-pc">', unsafe_allow_html=True)
-    foto = st.camera_input("Tire foto da placa do motor")
+    foto = st.camera_input("Capture a placa para análise")
     st.markdown('</div>', unsafe_allow_html=True)
-
-    if foto:
-        with st.spinner('O Gemini está lendo a placa...'):
-            img = Image.open(foto)
-            prompt = "Extraia apenas os dados principais desta placa de motor: Marca, CV e RPM. Seja direto e curto."
-            response = model.generate_content([prompt, img])
-            texto_da_foto = response.text
-            st.success(f"Identificado: {texto_da_foto}")
     
-    # Se o usuário estiver no PC, avisamos que a câmera foi bloqueada pelo sistema
-    if st.session_state.get('viewport_width', 1100) > 1024:
-         st.warning("Abertura de câmera bloqueada no Computador. Use o Celular para esta função.")
+    if foto:
+        with st.spinner('IA analisando especificações...'):
+            img = Image.open(foto)
+            prompt = "Identifique: Marca, Potência (CV/KW), RPM e Tensão. Responda apenas os valores separados por vírgula."
+            response = model.generate_content([prompt, img])
+            st.session_state.resultado_ia = response.text
+            st.session_state.abrir_camera = False # Fecha a câmera após ler
+
+# Cabeçalho de Informações da IA (Aparece após o scan)
+if st.session_state.get('resultado_ia'):
+    st.info(f"📋 **Dados Detectados pela IA:** {st.session_state.resultado_ia}")
 
 st.markdown("---")
 
-# --- LÓGICA DE BUSCA E BANCO DE DADOS ---
-ARQUIVO_CSV = 'meubancodedados.csv' 
+# --- BANCO DE DADOS E BUSCA ---
+ARQUIVO_CSV = 'meubancodedados.csv'
 
 if os.path.exists(ARQUIVO_CSV):
-    try:
-        # Lendo o CSV com o separador correto
-        df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
-        
-        # O campo de busca recebe o texto da foto se houver
-        valor_busca = texto_da_foto if texto_da_foto else ""
-        busca = st.text_input("🔍 Buscar por Marca, CV ou Fio", value=valor_busca)
-        
-        if busca:
-            mask = df.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
-            df_filtrado = df[mask]
-        else:
-            df_filtrado = df
+    df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
+    
+    # Busca integrada com a IA
+    sugestao = st.session_state.get('resultado_ia', "")
+    busca = st.text_input("🔍 Buscar Motor (Marca, CV ou Carcaça)", value=sugestao)
+    
+    if busca:
+        mask = df.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
+        df_filtrado = df[mask]
+    else:
+        df_filtrado = df
 
-        st.write(f"Exibindo **{len(df_filtrado)}** motores encontrados.")
+    # Exibição Profissional dos Resultados
+    for index, row in df_filtrado.iterrows():
+        with st.container():
+            st.markdown(f"""
+            <div class="card-motor">
+                <h3>📦 {row.get('Marca', 'GENÉRICO')} - {row.get('Motor_CV', 'N/A')} CV</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.markdown("**🔧 MECÂNICA**")
+                st.write(f"RPM: {row.get('RPM', 'N/A')}")
+                st.write(f"Polos: {row.get('Polos', 'N/A')}")
+            with c2:
+                st.markdown("**🧵 BOBINAGEM**")
+                st.write(f"Fio: {row.get('Fio_Princ', 'N/A')}")
+                st.write(f"Passo: {row.get('Passo_Princ', 'N/A')}")
+            with c3:
+                st.markdown("**⚡ ELÉTRICA**")
+                st.write(f"Capacitor: {row.get('Capacitores', 'N/A')}")
+                st.write(f"Fio Aux: {row.get('Fio_Aux', 'N/A')}")
+            with c4:
+                st.markdown("**🖼️ ESQUEMAS**")
+                # Botões para ver as ligações
+                polos = str(row.get('Polos', ''))
+                if st.button(f"Ver Ligação {polos}P", key=f"btn_{index}"):
+                    st.warning(f"Aqui abrirá a imagem da ligação de {polos} polos em breve.")
+            st.markdown("<br>", unsafe_allow_html=True)
 
-        # Exibição em cards
-        for index, row in df_filtrado.iterrows():
-            titulo = f"📦 {row.get('Marca', 'S/M')} | {row.get('Motor_CV', 'N/A')} CV"
-            with st.expander(titulo):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.markdown("### 📋 Placa")
-                    st.write(f"**RPM:** {row.get('RPM', 'N/A')}")
-                    st.write(f"**Polos:** {row.get('Polos', 'N/A')}")
-                with c2:
-                    st.markdown("### 🛠️ Bobina Principal")
-                    st.write(f"**Fio:** {row.get('Fio_Princ', 'N/A')}")
-                    st.write(f"**Passo:** {row.get('Passo_Princ', 'N/A')}")
-                with c3:
-                    st.markdown("### ⚡ Bobina Auxiliar")
-                    st.write(f"**Fio Aux:** {row.get('Fio_Aux', 'N/A')}")
-                    st.write(f"**Capacitor:** {row.get('Capacitores', 'N/A')}")
-
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
 else:
-    st.info("Aguardando o arquivo 'meubancodedados.csv' no GitHub...")
+    st.warning("Aguardando base de dados CSV...")
