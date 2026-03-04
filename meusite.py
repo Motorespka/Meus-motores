@@ -116,3 +116,4 @@ if not df.empty:
                     path = os.path.join(PASTA_ESQUEMAS, f"{nome_lig.png}")
                     if os.path.exists(path):
                         st.image(path, use_container_width=True)
+                        
