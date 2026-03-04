@@ -4,47 +4,43 @@ import os
 import re
 import hashlib
 from datetime import datetime, timedelta
-from PIL import Image
 
-# --- 1. CONFIGURAÇÕES E BANCO TÉCNICO ---
-ARQUIVO_USUARIOS = 'usuarios.csv'
-ARQUIVO_CSV = 'meubancodedados.csv'
-PASTA_ESQUEMAS = 'esquemas_fotos'
-CHAVE_MESTRA_CHEFIA = "PABLO2026"
-
-# Tabela AWG Oficial (Área em mm²)
+# --- 1. BANCO TÉCNICO DE ENGENHARIA ---
 TABELA_AWG = {
     '14': 2.08, '15': 1.65, '16': 1.31, '17': 1.04, '18': 0.823, '19': 0.653,
     '20': 0.518, '21': 0.410, '22': 0.326, '23': 0.258, '24': 0.205, '25': 0.162
 }
 
-if not os.path.exists(PASTA_ESQUEMAS): os.makedirs(PASTA_ESQUEMAS)
+# --- 2. MOTOR DE CÁLCULO DE RISCO ---
+def analisar_risco(area_alvo, area_teste):
+    if area_alvo <= 0: return None
+    diff = ((area_teste - area_alvo) / area_alvo) * 100
+    
+    if abs(diff) <= 2.0:
+        return {"cor": "#2ecc71", "status": "VERDE: EXCELENTE", "msg": "Motor idêntico ao original. Desempenho 100%."}
+    elif 2.0 < diff <= 6.0:
+        return {"cor": "#f1c40f", "status": "AMARELO: BOM", "msg": "Motor terá leve ganho de força, mas o fio ocupará mais espaço na ranhura."}
+    elif -6.0 <= diff < -2.0:
+        return {"cor": "#e67e22", "status": "LARANJA: REGULAR", "msg": "Motor perderá torque e terá aquecimento acima do normal."}
+    else:
+        return {"cor": "#e74c3c", "status": "VERMELHO: PERIGOSO", "msg": "ALTO RISCO! O motor pode queimar ou não ter força para rodar."}
 
-# --- 2. FUNÇÕES DE ENGENHARIA AUTOMÁTICA ---
-def calcular_mm2(texto_fio):
-    try:
-        texto = str(texto_fio).lower().replace('awg', '').strip()
-        if 'x' in texto:
-            partes = texto.split('x')
-            qtd = int(re.findall(r'\d+', partes[0])[0])
-            bitola = partes[1].strip()
-            return qtd * TABELA_AWG.get(bitola, 0)
-        bitolas = re.findall(r'\d+', texto)
-        return TABELA_AWG.get(bitolas[0], 0) if bitolas else 0
-    except: return 0
-
-def buscar_equivalentes(area_alvo):
+def buscar_possibilidades(area_alvo):
+    resultados = []
     if area_alvo <= 0: return []
-    opcoes = []
     for bitola, area_u in TABELA_AWG.items():
         for qtd in range(1, 5):
             area_t = area_u * qtd
             diff = ((area_t - area_alvo) / area_alvo) * 100
-            if -3.0 <= diff <= 5.0: # Margem de segurança técnica
-                opcoes.append({'label': f"{qtd}x {bitola} AWG", 'diff': diff})
-    return sorted(opcoes, key=lambda x: abs(x['diff']))
+            # Mostra possibilidades de -12% até +15% para dar visão total de erro
+            if -12.0 <= diff <= 15.0:
+                analise = analisar_risco(area_alvo, area_t)
+                resultados.append({'fio': f"{qtd}x {bitola} AWG", 'diff': diff, 'analise': analise})
+    return sorted(resultados, key=lambda x: abs(x['diff']))
 
 # --- 3. FUNÇÕES DE DADOS ---
+ARQUIVO_CSV = 'meubancodedados.csv'
+
 def carregar_dados():
     if not os.path.exists(ARQUIVO_CSV): return pd.DataFrame()
     df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig', dtype=str)
@@ -53,130 +49,79 @@ def carregar_dados():
 
 def salvar_dados(df):
     df.to_csv(ARQUIVO_CSV, index=False, sep=';', encoding='utf-8-sig')
-    st.cache_data.clear()
 
 # --- 4. INTERFACE ---
-st.set_page_config(page_title="Pablo Motores | Gestão", layout="wide")
+st.set_page_config(page_title="Pablo Motores Pro", layout="wide")
 
-if 'user_data' not in st.session_state: st.session_state['user_data'] = None
-
-# (Lógica de Login e Sidebar mantida conforme sua base original)
-if st.session_state['user_data']:
+if 'user_data' in st.session_state and st.session_state['user_data']:
     user = st.session_state['user_data']
-    e_admin = (user.get('perfil') == 'admin')
-    
-    menu = ["🔍 CONSULTA"]
-    if e_admin: menu += ["➕ NOVO CADASTRO", "🖼️ ADICIONAR FOTO", "🗑️ LIXEIRA"]
-    escolha = st.sidebar.radio("Menu", menu)
+    e_admin = user.get('perfil') == 'admin'
 
-    # --- ABA: CONSULTA (EDITAR E ALTERAR/CÓPIA) ---
+    escolha = st.sidebar.radio("Navegação:", ["🔍 CONSULTA", "➕ NOVO CADASTRO", "🗑️ LIXEIRA"])
+
     if escolha == "🔍 CONSULTA":
-        st.title("⚙️ SISTEMA DE CONSULTA TÉCNICA")
+        st.title("⚙️ PABLO UNIÃO - CONSULTA TÉCNICA")
         df = carregar_dados()
-        busca = st.text_input("🔍 Pesquisar motor...")
+        busca = st.text_input("🔍 Pesquisar por Marca ou Dados...")
 
         if not df.empty:
-            # Filtro para usuários comuns não verem deletados
-            if not e_admin:
-                df = df[df.get('status', 'ativo') != 'deletado']
-            
+            if not e_admin: df = df[df.get('status', 'ativo') != 'deletado']
             df_f = df[df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)] if busca else df
-            
+
             for idx, row in df_f.iterrows():
-                area_orig = calcular_mm2(row.get('Fio_Principal', ''))
-                label = f"📦 {row.get('Marca', 'S/M')} | {row.get('Potencia_CV', 'S/P')} CV"
-                
-                with st.expander(label):
-                    c1, c2 = st.columns([2, 1])
-                    with c1:
-                        st.write(f"**Fio Original:** {row.get('Fio_Principal')} ({area_orig:.3f} mm²)")
+                # Cálculo da área original
+                f_orig = str(row.get('Fio_Principal', ''))
+                area_base = 0
+                try:
+                    if 'x' in f_orig.lower():
+                        q, b = f_orig.lower().split('x')
+                        area_base = int(re.findall(r'\d+', q)[0]) * TABELA_AWG.get(re.findall(r'\d+', b)[0], 0)
+                    else:
+                        area_base = TABELA_AWG.get(re.findall(r'\d+', f_orig)[0], 0)
+                except: pass
+
+                with st.expander(f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV"):
+                    col_d, col_a = st.columns([2, 1])
+                    with col_d:
+                        st.write(f"**Fio de Fábrica:** {f_orig} ({area_base:.3f} mm²)")
                         st.write(f"**Amperagem:** {row.get('Amperagem')} | **RPM:** {row.get('RPM')}")
-                        st.write(f"**Mecânica:** Rol: {row.get('Rolamentos')} | Eixo: {row.get('Eixo_X')}/{row.get('Eixo_Y')}")
 
-                    with c2:
-                        # BOTÃO ALTERAR (CÓPIA AUTOMÁTICA)
-                        if st.button("🔄 Alterar (Ver Opções)", key=f"alt_{idx}"):
-                            st.session_state[f"view_{idx}"] = True
-                        
-                        # BOTÃO EDITAR (SOMENTE ADMIN)
+                    with col_a:
+                        if st.button("🔄 ABA ALTERAR (Ver Riscos)", key=f"alt_{idx}"):
+                            st.session_state[f"calc_{idx}"] = True
                         if e_admin:
-                            if st.button("📝 Editar Cadastro", key=f"ed_{idx}"):
+                            if st.button("📝 EDITAR ORIGINAL", key=f"ed_{idx}"):
                                 st.session_state[f"edit_{idx}"] = True
-                            if st.button("🗑️ Excluir", key=f"del_{idx}"):
+                            if st.button("🗑️ EXCLUIR", key=f"del_{idx}"):
                                 df.at[idx, 'status'] = 'deletado'
-                                df.at[idx, 'data_delete'] = datetime.now().strftime('%Y-%m-%d')
-                                salvar_dados(df)
-                                st.rerun()
+                                df.at[idx, 'data_del'] = datetime.now().strftime('%Y-%m-%d')
+                                salvar_dados(df); st.rerun()
 
-                    # --- LÓGICA ALTERAR (SUGESTÕES AUTOMÁTICAS) ---
-                    if st.session_state.get(f"view_{idx}"):
+                    # --- LÓGICA ALTERAR (SUGESTÕES POR CORES) ---
+                    if st.session_state.get(f"calc_{idx}"):
                         st.markdown("---")
-                        st.info("💡 **SUGESTÕES DE SUBSTITUIÇÃO SEGURA**")
-                        sugestoes = buscar_equivalentes(area_orig)
-                        if sugestoes:
-                            for s in sugestoes:
-                                cor = "green" if abs(s['diff']) < 1.5 else "orange"
-                                st.markdown(f"✅ **{s['label']}** (Diferença: {s['diff']:.1f}%)")
-                        else: st.warning("Nenhuma combinação AWG simples encontrada.")
-                        if st.button("Fechar Opções", key=f"cls_{idx}"):
-                            del st.session_state[f"view_{idx}"]; st.rerun()
+                        st.subheader("💡 Análise de Possibilidades")
+                        possibilidades = buscar_possibilidades(area_base)
+                        for p in possibilidades:
+                            st.markdown(f"""
+                                <div style="border-left: 8px solid {p['analise']['cor']}; background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 8px;">
+                                    <span style="color: black; font-weight: bold; font-size: 16px;">{p['fio']}</span> 
+                                    <span style="color: #666;">({p['diff']:.2f}%)</span><br>
+                                    <b style="color: {p['analise']['cor']};">{p['analise']['status']}</b><br>
+                                    <small style="color: #333;">{p['analise']['msg']}</small>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        if st.button("Fechar Alteração", key=f"cls_{idx}"):
+                            del st.session_state[f"calc_{idx}"]; st.rerun()
 
-                    # --- LÓGICA EDITAR (ADMIN - ALTERA O BANCO) ---
+                    # --- LÓGICA EDITAR (ADMIN) ---
                     if e_admin and st.session_state.get(f"edit_{idx}"):
-                        with st.form(f"form_ed_{idx}"):
-                            st.warning("✍️ VOCÊ ESTÁ ALTERANDO O ORIGINAL")
+                        with st.form(f"f_ed_{idx}"):
+                            st.warning("✍️ EDITANDO BANCO DE DADOS ORIGINAL")
                             n_fio = st.text_input("Fio Principal", value=row.get('Fio_Principal'))
                             n_amp = st.text_input("Amperagem", value=row.get('Amperagem'))
                             if st.form_submit_button("SALVAR"):
                                 df.at[idx, 'Fio_Principal'] = n_fio
                                 df.at[idx, 'Amperagem'] = n_amp
-                                salvar_dados(df)
-                                del st.session_state[f"edit_{idx}"]; st.rerun()
+                                salvar_dados(df); st.rerun()
 
-    # --- ABA: NOVO CADASTRO (TODOS OS CAMPOS) ---
-    elif escolha == "➕ NOVO CADASTRO" and e_admin:
-        st.title("➕ Novo Motor")
-        with st.form("cad_completo"):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                marca = st.text_input("Marca"); cv = st.text_input("Potencia_CV"); rpm = st.text_input("RPM")
-                pol = st.text_input("Polaridade"); volt = st.text_input("Voltagem"); amp = st.text_input("Amperagem")
-            with c2:
-                g_p = st.text_input("Grupo Principal"); f_p = st.text_input("Fio Principal")
-                rol = st.text_input("Rolamentos"); ex_x = st.text_input("Eixo X")
-            with c3:
-                g_a = st.text_input("Grupo Auxiliar"); f_a = st.text_input("Fio Auxiliar")
-                cap = st.text_input("Capacitor"); ex_y = st.text_input("Eixo Y")
-            
-            if st.form_submit_button("CADASTRAR"):
-                novo = {
-                    'Marca': marca, 'Potencia_CV': cv, 'RPM': rpm, 'Polaridade': pol, 'Voltagem': volt,
-                    'Amperagem': amp, 'Bobina_Principal': g_p, 'Fio_Principal': f_p, 'Rolamentos': rol,
-                    'Eixo_X': ex_x, 'Bobina_Auxiliar': g_a, 'Fio_Auxiliar': f_a, 'Capacitor': cap,
-                    'Eixo_Y': ex_y, 'status': 'ativo'
-                }
-                df_novo = pd.concat([carregar_dados(), pd.DataFrame([novo])], ignore_index=True)
-                salvar_dados(df_novo)
-                st.success("Salvo!")
-
-    # --- ABA: LIXEIRA (LIMPEZA APÓS 5 DIAS) ---
-    elif escolha == "🗑️ LIXEIRA" and e_admin:
-        st.title("🗑️ Lixeira")
-        df = carregar_dados()
-        if not df.empty:
-            hoje = datetime.now()
-            # Remove permanente se passar de 5 dias
-            for i, r in df[df['status'] == 'deletado'].iterrows():
-                data_del = datetime.strptime(r['data_delete'], '%Y-%m-%d')
-                if (hoje - data_del).days >= 5:
-                    df.drop(i, inplace=True)
-                    salvar_dados(df); st.rerun()
-            
-            excluidos = df[df['status'] == 'deletado']
-            st.write(f"Itens na lixeira: {len(excluidos)}")
-            for i, r in excluidos.iterrows():
-                st.error(f"{r['Marca']} - {r['Potencia_CV']} CV")
-                if st.button(f"Restaurar {i}"):
-                    df.at[i, 'status'] = 'ativo'
-                    salvar_dados(df); st.rerun()
-                    
