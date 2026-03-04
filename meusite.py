@@ -187,4 +187,5 @@ with tab3:
              # Lógica de salvar...
              pass
 
-st.markdown("<br><p style='text-align:center; color:#888;'>Pablo Motores © 20
+st.markdown("<br><p style='text-align:center; color:#888;'>Pablo Motores © 2026 | Tecnologia para Rebobinagem</p>", unsafe_allow_html=True)
+
