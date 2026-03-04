@@ -9,95 +9,133 @@ CHAVE_API = "AIzaSyBcwcsk-wcOGIeHZAuEoGjx4LkNQA5CCF4"
 genai.configure(api_key=CHAVE_API)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Configuração visual profissional
-st.set_page_config(page_title="Oficina Pablo | Rebobinagem Pro", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Pablo Motores | Engenharia de Rebobinagem", layout="wide")
 
-# Estilização CSS personalizada
+# --- ESTILO PROFISSIONAL (CSS) ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f5f5; }
-    .stHeader { background-color: #1e1e1e; color: white; padding: 1rem; border-radius: 10px; }
-    .card-motor { background-color: white; padding: 20px; border-left: 5px solid #ff4b4b; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+    /* Estilo do Fundo e Container */
+    .stApp { background-color: #121212; color: #e0e0e0; }
+    
+    /* Header Profissional */
+    .main-header {
+        background: linear-gradient(90deg, #1e1e1e 0%, #333333 100%);
+        padding: 2rem;
+        border-radius: 15px;
+        border-bottom: 4px solid #f1c40f;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    
+    /* Card de Motor */
+    .motor-card {
+        background-color: #ffffff;
+        color: #121212;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        border-left: 8px solid #f1c40f;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    
+    /* Botões Customizados */
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
+        font-weight: bold;
+        text-transform: uppercase;
+        transition: 0.3s;
+    }
+    
+    /* Esconder câmera no PC */
     @media (min-width: 1024px) { .camera-off-pc { display: none; } }
     </style>
     """, unsafe_allow_html=True)
 
-# Cabeçalho fixo
-with st.container():
-    st.markdown('<div class="stHeader"><h1>⚡ Oficina Pablo: Gestão de Rebobinagem</h1></div>', unsafe_allow_html=True)
+# --- CABEÇALHO ---
+st.markdown("""
+    <div class="main-header">
+        <h1 style='margin:0; color:#f1c40f;'>PABLO MOTORES</h1>
+        <p style='margin:0; color:#bbb;'>Engenharia e Rebobinagem Técnica</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- SISTEMA DE LEITURA (IA) ---
-st.subheader("📸 Scan de Placa do Motor")
-col_botoes = st.columns([1, 1])
+# --- ABAS NAVEGACIONAIS ---
+tab1, tab2 = st.tabs(["🔍 CONSULTA TÉCNICA", "📚 ESQUEMAS DE LIGAÇÃO"])
 
-with col_botoes[0]:
-    if st.button("🔍 Escanear Placa com Foto"):
-        st.session_state.abrir_camera = True
-
-if st.session_state.get('abrir_camera', False):
-    st.markdown('<div class="camera-off-pc">', unsafe_allow_html=True)
-    foto = st.camera_input("Capture a placa para análise")
-    st.markdown('</div>', unsafe_allow_html=True)
+with tab1:
+    st.markdown("### 🛠️ Localizar Motor")
     
-    if foto:
-        with st.spinner('IA analisando especificações...'):
-            img = Image.open(foto)
-            prompt = "Identifique: Marca, Potência (CV/KW), RPM e Tensão. Responda apenas os valores separados por vírgula."
-            response = model.generate_content([prompt, img])
-            st.session_state.resultado_ia = response.text
-            st.session_state.abrir_camera = False # Fecha a câmera após ler
+    # Seção de IA
+    with st.expander("📸 Escanear Placa com Inteligência Artificial"):
+        st.markdown('<div class="camera-off-pc">', unsafe_allow_html=True)
+        foto = st.camera_input("Focar na placa do motor")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if foto:
+            with st.spinner('Decodificando especificações técnicas...'):
+                img = Image.open(foto)
+                prompt = "Identifique Marca, Potência CV, RPM. Retorne apenas o valor principal para busca."
+                response = model.generate_content([prompt, img])
+                st.session_state.busca_ia = response.text
+                st.success(f"Busca sugerida: {st.session_state.busca_ia}")
 
-# Cabeçalho de Informações da IA (Aparece após o scan)
-if st.session_state.get('resultado_ia'):
-    st.info(f"📋 **Dados Detectados pela IA:** {st.session_state.resultado_ia}")
+    # Campo de busca principal
+    busca_val = st.session_state.get('busca_ia', "")
+    termo_busca = st.text_input("Digite Marca, Potência ou Detalhe do Cálculo", value=busca_val)
 
-st.markdown("---")
+    # Lógica do Banco de Dados
+    ARQUIVO_CSV = 'meubancodedados.csv'
+    if os.path.exists(ARQUIVO_CSV):
+        df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
+        
+        if termo_busca:
+            mask = df.astype(str).apply(lambda x: x.str.contains(termo_busca, case=False, na=False)).any(axis=1)
+            df_filtrado = df[mask]
+        else:
+            df_filtrado = df
 
-# --- BANCO DE DADOS E BUSCA ---
-ARQUIVO_CSV = 'meubancodedados.csv'
+        st.write(f"Resultados encontrados: **{len(df_filtrado)}**")
 
-if os.path.exists(ARQUIVO_CSV):
-    df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
-    
-    # Busca integrada com a IA
-    sugestao = st.session_state.get('resultado_ia', "")
-    busca = st.text_input("🔍 Buscar Motor (Marca, CV ou Carcaça)", value=sugestao)
-    
-    if busca:
-        mask = df.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
-        df_filtrado = df[mask]
+        for index, row in df_filtrado.iterrows():
+            with st.container():
+                # Design do Card Profissional
+                st.markdown(f"""
+                <div class="motor-card">
+                    <h2 style='margin-top:0; color:#2c3e50;'>{row.get('Marca', 'MOTOR')} | {row.get('Motor_CV', '-')} CV</h2>
+                    <hr style='margin: 10px 0;'>
+                    <div style='display: flex; justify-content: space-between; flex-wrap: wrap;'>
+                        <div style='flex: 1; min-width: 150px;'>
+                            <p><b>⚙️ Mecânica:</b> {row.get('RPM', '-')} RPM | {row.get('Polos', '-')} Polos</p>
+                            <p><b>🧵 Bobina:</b> Fio {row.get('Fio_Princ', '-')} | Passo {row.get('Passo_Princ', '-')}</p>
+                        </div>
+                        <div style='flex: 1; min-width: 150px;'>
+                            <p><b>⚡ Elétrica:</b> {row.get('Capacitores', '-')} Cap.</p>
+                            <p><b>📐 Auxiliar:</b> Fio {row.get('Fio_Aux', '-')}</p>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("🖼️ VER LIGAÇÃO", key=f"lig_{index}"):
+                    st.info(f"Carregando esquema técnico para {row.get('Polos', '-')} polos...")
+                    # Aqui você pode usar st.image("caminho/da/foto.jpg")
+                st.markdown("---")
     else:
-        df_filtrado = df
+        st.error("Banco de dados não encontrado. Verifique o arquivo CSV.")
 
-    # Exibição Profissional dos Resultados
-    for index, row in df_filtrado.iterrows():
-        with st.container():
-            st.markdown(f"""
-            <div class="card-motor">
-                <h3>📦 {row.get('Marca', 'GENÉRICO')} - {row.get('Motor_CV', 'N/A')} CV</h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                st.markdown("**🔧 MECÂNICA**")
-                st.write(f"RPM: {row.get('RPM', 'N/A')}")
-                st.write(f"Polos: {row.get('Polos', 'N/A')}")
-            with c2:
-                st.markdown("**🧵 BOBINAGEM**")
-                st.write(f"Fio: {row.get('Fio_Princ', 'N/A')}")
-                st.write(f"Passo: {row.get('Passo_Princ', 'N/A')}")
-            with c3:
-                st.markdown("**⚡ ELÉTRICA**")
-                st.write(f"Capacitor: {row.get('Capacitores', 'N/A')}")
-                st.write(f"Fio Aux: {row.get('Fio_Aux', 'N/A')}")
-            with c4:
-                st.markdown("**🖼️ ESQUEMAS**")
-                # Botões para ver as ligações
-                polos = str(row.get('Polos', ''))
-                if st.button(f"Ver Ligação {polos}P", key=f"btn_{index}"):
-                    st.warning(f"Aqui abrirá a imagem da ligação de {polos} polos em breve.")
-            st.markdown("<br>", unsafe_allow_html=True)
+with tab2:
+    st.header("📖 Biblioteca de Esquemas")
+    st.write("Selecione o tipo de ligação para visualizar o diagrama:")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⚡ Ligação 2 Polos"): st.image("https://via.placeholder.com/400x300.png?text=Esquema+2+Polos")
+        if st.button("⚡ Ligação 4 Polos"): st.image("https://via.placeholder.com/400x300.png?text=Esquema+4+Polos")
+    with col2:
+        if st.button("⚡ Ligação 6 Polos"): st.image("https://via.placeholder.com/400x300.png?text=Esquema+6+Polos")
+        if st.button("⚡ Ligação 8 Polos"): st.image("https://via.placeholder.com/400x300.png?text=Esquema+8+Polos")
 
-else:
-    st.warning("Aguardando base de dados CSV...")
+# --- RODAPÉ ---
+st.markdown("<p style='text-align: center; color: #555;'>Pablo Motores © 2024 | Sistema de Rebobinagem Inteligente</p>", unsafe_allow_html=True)
