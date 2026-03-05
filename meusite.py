@@ -68,9 +68,8 @@ st.set_page_config(page_title="Pablo Motores Pro", layout="wide")
 st.markdown("""
     <style>
     .stExpander { border: 1px solid #444 !important; border-radius: 8px !important; margin-bottom: 10px !important; }
-    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
-    .stTabs [data-baseweb="tab"] { background-color: #1e1e1e; border-radius: 4px; padding: 10px 20px; color: white; }
-    .stTabs [aria-selected="true"] { background-color: #ff4b4b !important; }
+    .status-card { padding: 10px; border-radius: 5px; text-align: center; color: white; font-weight: bold; margin: 10px 0; }
+    .label-info { color: #666; font-size: 0.9em; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -79,28 +78,23 @@ COL_MOTORES = [
     'Bobina_Principal', 'Fio_Principal', 'Bobina_Auxiliar', 'Fio_Auxiliar', 
     'Tipo_Ligacao', 'Rolamentos', 'Eixo_X', 'Eixo_Y', 'Capacitor', 'status'
 ]
-COL_FOTOS = ['nome_ligacao', 'caminho_arquivo']
-
-if 'user_data' not in st.session_state: st.session_state['user_data'] = {'usuario': 'admin', 'perfil': 'admin'}
-
 df_motores = carregar_dados(ARQUIVO_CSV, COL_MOTORES)
-df_fotos = carregar_dados(ARQUIVO_FOTOS, COL_FOTOS)
+df_fotos = carregar_dados(ARQUIVO_FOTOS, ['nome_ligacao', 'caminho_arquivo'])
 lista_ligacoes = [""] + df_fotos['nome_ligacao'].tolist()
 
 with st.sidebar:
     st.title("⚙️ PABLO MOTORES")
     menu = st.radio("Menu Principal", ["🔍 CONSULTA", "➕ NOVO MOTOR", "🖼️ BIBLIOTECA", "🗑️ LIXEIRA"])
     st.divider()
-    # Adicionando um simulador público rápido no Sidebar
-    st.subheader("🛠️ Dúvida Rápida")
-    fio_rapido = st.text_input("Consultar bitola AWG:", placeholder="Ex: 18")
-    if fio_rapido in TABELA_AWG_TECNICA:
-        st.success(f"{fio_rapido} AWG = {TABELA_AWG_TECNICA[fio_rapido]} mm²")
+    st.subheader("📏 Consulta AWG")
+    fio_q = st.text_input("Bitola (ex: 20):")
+    if fio_q in TABELA_AWG_TECNICA:
+        st.success(f"**{fio_q} AWG** = {TABELA_AWG_TECNICA[fio_q]} mm²")
 
 # --- ABA CONSULTA ---
 if menu == "🔍 CONSULTA":
     st.header("🔍 Banco de Dados Técnico")
-    busca = st.text_input("Filtrar motor...", placeholder="Marca, CV, RPM ou Fio...")
+    busca = st.text_input("Filtrar motor...")
     
     df_f = df_motores[df_motores['status'] != 'deletado']
     if busca:
@@ -111,21 +105,27 @@ if menu == "🔍 CONSULTA":
         label = f"📦 {row['Marca']} | {row['Potencia_CV']} CV | {row['RPM']} RPM"
         
         with st.expander(label):
-            # DIVISÃO POR NÍVEIS DE ACESSO (TABS)
             tab1, tab2, tab3 = st.tabs(["📋 DADOS GERAIS", "⚙️ ÁREA TÉCNICA", "👑 PAINEL CHEFE"])
             
             with tab1:
-                col1, col2, col3 = st.columns([1, 1, 1.2])
-                with col1:
+                # EXIBIÇÃO COMPLETA DE TODAS AS INFORMAÇÕES
+                c1, c2, c3 = st.columns(3)
+                with c1:
                     st.markdown("#### ⚡ Elétrica")
                     st.write(f"**Fio Principal:** `{row['Fio_Principal']}`")
+                    st.write(f"**Fio Auxiliar:** {row['Fio_Auxiliar']}")
                     st.write(f"**Amperagem:** {row['Amperagem']} A")
+                    st.write(f"**Voltagem:** {row['Voltagem']} V")
+                    st.write(f"**Pólos:** {row['Polaridade']}")
                     st.write(f"**Capacitor:** {row['Capacitor']}")
-                with col2:
-                    st.markdown("#### 🔧 Mecânica")
+                with c2:
+                    st.markdown("#### 🔧 Mecânica e Grupos")
+                    st.write(f"**Grupos (P/A):** {row['Bobina_Principal']} / {row['Bobina_Auxiliar']}")
                     st.write(f"**Rolamentos:** {row['Rolamentos']}")
-                    st.write(f"**Eixos:** {row['Eixo_X']} / {row['Eixo_Y']}")
-                with col3:
+                    st.write(f"**Eixo X:** {row['Eixo_X']}")
+                    st.write(f"**Eixo Y:** {row['Eixo_Y']}")
+                with c3:
+                    st.markdown("#### 🖼️ Esquema")
                     tipo = row['Tipo_Ligacao']
                     if tipo and tipo in df_fotos['nome_ligacao'].values:
                         img_path = df_fotos[df_fotos['nome_ligacao'] == tipo]['caminho_arquivo'].values[0]
@@ -133,59 +133,60 @@ if menu == "🔍 CONSULTA":
                     else: st.caption("Sem esquema.")
 
             with tab2:
-                st.subheader("Mudança de Características e Cálculos")
-                c_bt1, c_bt2, c_bt3 = st.columns(3)
-                if c_bt1.button("🔄 SIMULAR BITOLAS", key=f"c_{idx}"):
-                    st.session_state[f"sc_{idx}"] = not st.session_state.get(f"sc_{idx}", False)
+                st.subheader("Ferramentas de Conversão")
                 
-                # NOVO: Calculadora de Tensão (Exclusivo Profissional)
-                with st.expander("🔌 Conversor de Voltagem (Ex: 220V -> 380V)"):
-                    v_orig = st.number_input("Tensão Original (V)", value=220, key=f"vo_{idx}")
-                    v_nova = st.number_input("Nova Tensão desejada (V)", value=380, key=f"vn_{idx}")
-                    if v_orig > 0:
-                        fator = v_nova / v_orig
-                        st.info(f"O novo enrolamento deve ter **{fator:.2f}x** mais espiras.")
-                        st.warning(f"A bitola do fio deve ser reduzida para suportar a nova tensão.")
-
-                if st.session_state.get(f"sc_{idx}"):
-                    # Lógica de cálculo avançado que você já tinha
-                    fio_teste = st.text_input("Fio para teste (Ex: 2x18):", key=f"input_t_{idx}")
-                    if fio_teste:
-                        area_n = calcular_area_mm2(fio_teste)
-                        diff = ((area_n - area_ref) / area_ref) * 100 if area_ref > 0 else 0
-                        m1, m2, m3 = st.columns(3)
-                        m1.metric("Diferença", f"{diff:.1f}%")
-                        m2.metric("Aquecimento", "Normal" if diff >= -3 else "Alto")
-                        m3.metric("Torque", "Original" if diff >= -2 else "Perda")
+                # CONVERSOR DE TENSÃO AUTOMÁTICO
+                with st.container(border=True):
+                    st.markdown("**🔌 Conversor de Tensão Automático**")
+                    col_v1, col_v2 = st.columns(2)
+                    v_de = col_v1.number_input("De (V):", value=220, key=f"vde_{idx}")
+                    v_para = col_v2.number_input("Para (V):", value=380, key=f"vpa_{idx}")
+                    
+                    if v_de > 0:
+                        fator = v_para / v_de
+                        nova_area = area_ref / fator # Em alta tensão o fio é mais fino
+                        st.info(f"💡 **Resultado:** Aumentar espiras em **{fator:.2f}x**. Nova área de fio necessária: **{nova_area:.4f} mm²**")
+                
+                # SIMULADOR DE FIOS (O que você quer usar vs O que o motor pede)
+                st.markdown("**🔄 Simulador de Viabilidade de Fios**")
+                fio_teste = st.text_input("Fio que você tem em mãos (Ex: 1x18 ou 2x21):", key=f"ft_{idx}")
+                if fio_teste:
+                    area_n = calcular_area_mm2(fio_teste)
+                    diff = ((area_n - area_ref) / area_ref) * 100 if area_ref > 0 else 0
+                    cor = "#28a745" if abs(diff) < 3 else "#ffc107" if abs(diff) < 7 else "#dc3545"
+                    st.markdown(f"<div class='status-card' style='background:{cor}'>DIFERENÇA: {diff:.2f}%</div>", unsafe_allow_html=True)
+                    
+                    col_res1, col_res2 = st.columns(2)
+                    col_res1.metric("Espaço na Ranhura", "OK" if diff < 5 else "Apertado")
+                    col_res2.metric("Risco de Queima", "Baixo" if diff > -4 else "ALTO (Falta Cobre)")
 
             with tab3:
-                st.subheader("Análise de Custo e Precisão (Admin)")
-                preco_cobre = st.number_input("Preço do Cobre (Kg)", value=65.0, key=f"pr_{idx}")
-                peso_est = st.number_input("Peso estimado de cobre (Kg)", value=1.5, key=f"pe_{idx}")
-                st.metric("Custo estimado de material", f"R$ {preco_cobre * peso_est:.2f}")
+                st.subheader("Gestão de Custos")
+                p_cobre = st.number_input("Preço KG Cobre (R$)", value=65.0, key=f"pc_{idx}")
+                peso = st.number_input("Peso do Cobre no Motor (KG)", value=1.0, key=f"ps_{idx}")
+                st.metric("Custo Total de Cobre", f"R$ {p_cobre * peso:.2f}")
                 
                 st.divider()
-                if st.button("📝 EDITAR MOTOR", key=f"e_{idx}", use_container_width=True):
-                    st.session_state[f"se_{idx}"] = not st.session_state.get(f"se_{idx}", False)
-                if st.button("🗑️ EXCLUIR REGISTRO", key=f"d_{idx}", use_container_width=True):
+                if st.button("📝 EDITAR MOTOR", key=f"be_{idx}"):
+                    st.session_state[f"ed_{idx}"] = not st.session_state.get(f"ed_{idx}", False)
+                if st.button("🗑️ EXCLUIR", key=f"bd_{idx}"):
                     df_motores.at[idx, 'status'] = 'deletado'
                     salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
 
-            # --- FORMULÁRIO DE EDIÇÃO (Abaixo das abas se ativado) ---
-            if st.session_state.get(f"se_{idx}"):
-                with st.form(f"f_ed_{idx}"):
-                    st.write("### Modo Edição Master")
-                    ed_fp = st.text_input("Fio Principal", value=row['Fio_Principal'])
-                    ed_amp = st.text_input("Amperagem", value=row['Amperagem'])
-                    if st.form_submit_button("Confirmar Alterações"):
-                        df_motores.at[idx, 'Fio_Principal'] = ed_fp
-                        df_motores.at[idx, 'Amperagem'] = ed_amp
+            if st.session_state.get(f"ed_{idx}"):
+                with st.form(f"form_ed_{idx}"):
+                    st.write("### Editar Informações")
+                    new_fp = st.text_input("Fio Principal", value=row['Fio_Principal'])
+                    new_amp = st.text_input("Amperagem", value=row['Amperagem'])
+                    if st.form_submit_button("Salvar"):
+                        df_motores.at[idx, 'Fio_Principal'] = new_fp
+                        df_motores.at[idx, 'Amperagem'] = new_amp
                         salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
 
-# --- ABA NOVO MOTOR ---
+# --- DEMAIS ABAS ---
 elif menu == "➕ NOVO MOTOR":
     st.header("➕ Cadastro de Novo Motor")
-    with st.form("add_motor"):
+    with st.form("add"):
         c1, c2, c3 = st.columns(3)
         with c1:
             m = st.text_input("Marca"); cv = st.text_input("CV"); r = st.text_input("RPM")
@@ -196,13 +197,12 @@ elif menu == "➕ NOVO MOTOR":
             lig = st.selectbox("Ligação", lista_ligacoes)
         with c3:
             rol = st.text_input("Rolamentos"); ex = st.text_input("Eixo X"); ey = st.text_input("Eixo Y"); cap = st.text_input("Capacitor")
-        
-        if st.form_submit_button("💾 SALVAR DADOS NO SISTEMA"):
+        if st.form_submit_button("SALVAR"):
             novo = {'Marca': m, 'Potencia_CV': cv, 'RPM': r, 'Voltagem': v, 'Amperagem': a, 'Polaridade': pol,
                     'Fio_Principal': fp, 'Bobina_Principal': gp, 'Fio_Auxiliar': fa, 'Bobina_Auxiliar': ga,
                     'Tipo_Ligacao': lig, 'Rolamentos': rol, 'Eixo_X': ex, 'Eixo_Y': ey, 'Capacitor': cap, 'status': 'ativo'}
             df_motores = pd.concat([df_motores, pd.DataFrame([novo])], ignore_index=True)
-            salvar_dados(df_motores, ARQUIVO_CSV); st.success("Motor salvo com sucesso!"); st.rerun()
+            salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
 
 elif menu == "🖼️ BIBLIOTECA":
     st.header("🖼️ Biblioteca de Esquemas")
