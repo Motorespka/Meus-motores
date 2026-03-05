@@ -1,0 +1,31 @@
+import streamlit as st
+import pandas as pd
+import random
+import string
+from core.database import carregar, salvar
+
+st.title("👥 Grupos de Trabalho")
+
+df = carregar("grupos.csv")
+
+def gerar_token():
+
+    return ''.join(
+        random.choice(string.ascii_uppercase + string.digits)
+        for _ in range(6)
+    )
+
+if st.button("Criar grupo"):
+
+    token = gerar_token()
+
+    novo = pd.DataFrame([{
+        "token":token
+    }])
+
+    df = pd.concat([df,novo], ignore_index=True)
+
+    salvar(df,"grupos.csv")
+
+    st.success(f"Token do grupo: {token}")
+    

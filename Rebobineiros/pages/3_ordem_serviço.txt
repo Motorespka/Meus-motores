@@ -1,0 +1,32 @@
+import streamlit as st
+import pandas as pd
+from core.database import carregar, salvar
+
+st.title("🧾 Ordem de Serviço")
+
+df = carregar("os.csv")
+
+cliente = st.text_input("Cliente")
+motor = st.text_input("Motor")
+
+problema = st.text_area("Problema")
+
+pecas = st.text_area("Peças necessárias")
+
+valor = st.number_input("Valor")
+
+if st.button("Criar OS"):
+
+    nova = pd.DataFrame([{
+        "cliente":cliente,
+        "motor":motor,
+        "problema":problema,
+        "pecas":pecas,
+        "valor":valor
+    }])
+
+    df = pd.concat([df,nova], ignore_index=True)
+
+    salvar(df,"os.csv")
+
+    st.success("OS criada")
