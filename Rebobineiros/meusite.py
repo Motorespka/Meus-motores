@@ -20,4 +20,5 @@ Sistema profissional para:
 🛒 Fornecedores
 """)
 
+
 st.info("Use o menu lateral para navegar pelo sistema.")
