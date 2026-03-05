@@ -69,7 +69,6 @@ st.markdown("""
     <style>
     .stExpander { border: 1px solid #444 !important; border-radius: 8px !important; margin-bottom: 10px !important; }
     .status-card { padding: 10px; border-radius: 5px; text-align: center; color: white; font-weight: bold; margin: 10px 0; }
-    .label-info { color: #666; font-size: 0.9em; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -94,7 +93,7 @@ with st.sidebar:
 # --- ABA CONSULTA ---
 if menu == "🔍 CONSULTA":
     st.header("🔍 Banco de Dados Técnico")
-    busca = st.text_input("Filtrar motor...")
+    busca = st.text_input("Filtrar motor...", placeholder="Marca, CV, RPM ou Fio...")
     
     df_f = df_motores[df_motores['status'] != 'deletado']
     if busca:
@@ -108,7 +107,6 @@ if menu == "🔍 CONSULTA":
             tab1, tab2, tab3 = st.tabs(["📋 DADOS GERAIS", "⚙️ ÁREA TÉCNICA", "👑 PAINEL CHEFE"])
             
             with tab1:
-                # EXIBIÇÃO COMPLETA DE TODAS AS INFORMAÇÕES
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.markdown("#### ⚡ Elétrica")
@@ -133,57 +131,69 @@ if menu == "🔍 CONSULTA":
                     else: st.caption("Sem esquema.")
 
             with tab2:
-                st.subheader("Ferramentas de Conversão")
+                st.subheader("Ferramentas de Conversão e Teste")
                 
-                # CONVERSOR DE TENSÃO AUTOMÁTICO
+                # CONVERSOR DE TENSÃO
                 with st.container(border=True):
                     st.markdown("**🔌 Conversor de Tensão Automático**")
                     col_v1, col_v2 = st.columns(2)
                     v_de = col_v1.number_input("De (V):", value=220, key=f"vde_{idx}")
                     v_para = col_v2.number_input("Para (V):", value=380, key=f"vpa_{idx}")
-                    
                     if v_de > 0:
                         fator = v_para / v_de
-                        nova_area = area_ref / fator # Em alta tensão o fio é mais fino
-                        st.info(f"💡 **Resultado:** Aumentar espiras em **{fator:.2f}x**. Nova área de fio necessária: **{nova_area:.4f} mm²**")
+                        nova_area = area_ref / fator
+                        st.info(f"💡 **Resultado:** Aumentar espiras em **{fator:.2f}x**. Nova área necessária: **{nova_area:.4f} mm²**")
                 
-                # SIMULADOR DE FIOS (O que você quer usar vs O que o motor pede)
-                st.markdown("**🔄 Simulador de Viabilidade de Fios**")
-                fio_teste = st.text_input("Fio que você tem em mãos (Ex: 1x18 ou 2x21):", key=f"ft_{idx}")
+                # CALCULAR ALTERAÇÃO (Simulador de fios)
+                st.markdown("**🔄 Calcular Alteração (Simulador)**")
+                fio_teste = st.text_input("Fio pretendido (Ex: 2x18):", key=f"ft_{idx}")
                 if fio_teste:
                     area_n = calcular_area_mm2(fio_teste)
                     diff = ((area_n - area_ref) / area_ref) * 100 if area_ref > 0 else 0
                     cor = "#28a745" if abs(diff) < 3 else "#ffc107" if abs(diff) < 7 else "#dc3545"
                     st.markdown(f"<div class='status-card' style='background:{cor}'>DIFERENÇA: {diff:.2f}%</div>", unsafe_allow_html=True)
-                    
-                    col_res1, col_res2 = st.columns(2)
-                    col_res1.metric("Espaço na Ranhura", "OK" if diff < 5 else "Apertado")
-                    col_res2.metric("Risco de Queima", "Baixo" if diff > -4 else "ALTO (Falta Cobre)")
+                
+                st.write("**Sugestões de combinação:**")
+                sugest = gerar_sugestoes(area_ref)
+                cols_s = st.columns(3)
+                for i, s in enumerate(sugest[:3]):
+                    cols_s[i].markdown(f"""<div style="border:1px solid {s['cor']}; padding:5px; border-radius:5px; text-align:center;">
+                        <small>{s['fio']}</small><br><b>{s['diff']:.1f}%</b></div>""", unsafe_allow_html=True)
 
             with tab3:
-                st.subheader("Gestão de Custos")
-                p_cobre = st.number_input("Preço KG Cobre (R$)", value=65.0, key=f"pc_{idx}")
-                peso = st.number_input("Peso do Cobre no Motor (KG)", value=1.0, key=f"ps_{idx}")
-                st.metric("Custo Total de Cobre", f"R$ {p_cobre * peso:.2f}")
+                st.subheader("Ações de Administrador")
+                col_btn1, col_btn2 = st.columns(2)
                 
-                st.divider()
-                if st.button("📝 EDITAR MOTOR", key=f"be_{idx}"):
+                if col_btn1.button("📝 EDITAR MOTOR", key=f"be_{idx}", use_container_width=True):
                     st.session_state[f"ed_{idx}"] = not st.session_state.get(f"ed_{idx}", False)
-                if st.button("🗑️ EXCLUIR", key=f"bd_{idx}"):
+                
+                if col_btn2.button("🗑️ EXCLUIR MOTOR", key=f"bd_{idx}", use_container_width=True):
                     df_motores.at[idx, 'status'] = 'deletado'
-                    salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+                    salvar_dados(df_motores, ARQUIVO_CSV)
+                    st.rerun()
 
-            if st.session_state.get(f"ed_{idx}"):
-                with st.form(f"form_ed_{idx}"):
-                    st.write("### Editar Informações")
-                    new_fp = st.text_input("Fio Principal", value=row['Fio_Principal'])
-                    new_amp = st.text_input("Amperagem", value=row['Amperagem'])
-                    if st.form_submit_button("Salvar"):
-                        df_motores.at[idx, 'Fio_Principal'] = new_fp
-                        df_motores.at[idx, 'Amperagem'] = new_amp
-                        salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+                # FORMULÁRIO DE EDIÇÃO (Aparece ao clicar em Editar)
+                if st.session_state.get(f"ed_{idx}"):
+                    st.divider()
+                    with st.form(f"form_ed_{idx}"):
+                        st.write("### Modo Edição")
+                        ed_c1, ed_c2 = st.columns(2)
+                        with ed_c1:
+                            e_m = st.text_input("Marca", value=row['Marca'])
+                            e_cv = st.text_input("CV", value=row['Potencia_CV'])
+                            e_fp = st.text_input("Fio Principal", value=row['Fio_Principal'])
+                        with ed_c2:
+                            e_amp = st.text_input("Amperagem", value=row['Amperagem'])
+                            e_rol = st.text_input("Rolamentos", value=row['Rolamentos'])
+                            e_lig = st.selectbox("Ligação", lista_ligacoes, index=lista_ligacoes.index(row['Tipo_Ligacao']) if row['Tipo_Ligacao'] in lista_ligacoes else 0)
+                        
+                        if st.form_submit_button("💾 SALVAR ALTERAÇÕES"):
+                            df_motores.loc[idx, ['Marca', 'Potencia_CV', 'Fio_Principal', 'Amperagem', 'Rolamentos', 'Tipo_Ligacao']] = [e_m, e_cv, e_fp, e_amp, e_rol, e_lig]
+                            salvar_dados(df_motores, ARQUIVO_CSV)
+                            st.success("Atualizado!")
+                            st.rerun()
 
-# --- DEMAIS ABAS ---
+# --- ABA NOVO MOTOR ---
 elif menu == "➕ NOVO MOTOR":
     st.header("➕ Cadastro de Novo Motor")
     with st.form("add"):
@@ -197,24 +207,28 @@ elif menu == "➕ NOVO MOTOR":
             lig = st.selectbox("Ligação", lista_ligacoes)
         with c3:
             rol = st.text_input("Rolamentos"); ex = st.text_input("Eixo X"); ey = st.text_input("Eixo Y"); cap = st.text_input("Capacitor")
-        if st.form_submit_button("SALVAR"):
+        if st.form_submit_button("💾 SALVAR NOVO MOTOR"):
             novo = {'Marca': m, 'Potencia_CV': cv, 'RPM': r, 'Voltagem': v, 'Amperagem': a, 'Polaridade': pol,
                     'Fio_Principal': fp, 'Bobina_Principal': gp, 'Fio_Auxiliar': fa, 'Bobina_Auxiliar': ga,
                     'Tipo_Ligacao': lig, 'Rolamentos': rol, 'Eixo_X': ex, 'Eixo_Y': ey, 'Capacitor': cap, 'status': 'ativo'}
             df_motores = pd.concat([df_motores, pd.DataFrame([novo])], ignore_index=True)
-            salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+            salvar_dados(df_motores, ARQUIVO_CSV)
+            st.success("Motor cadastrado com sucesso!")
+            st.rerun()
 
+# --- ABA BIBLIOTECA ---
 elif menu == "🖼️ BIBLIOTECA":
     st.header("🖼️ Biblioteca de Esquemas")
     with st.form("lib"):
-        n = st.text_input("Nome"); f = st.file_uploader("Foto", type=['png','jpg','jpeg'])
+        n = st.text_input("Nome do Esquema"); f = st.file_uploader("Upload da Imagem", type=['png','jpg','jpeg'])
         if st.form_submit_button("Subir Foto"):
             if n and f:
                 path = os.path.join(PASTA_UPLOADS, f.name)
                 with open(path, "wb") as fi: fi.write(f.getbuffer())
                 df_f_new = pd.DataFrame([{'nome_ligacao': n, 'caminho_arquivo': path}])
                 df_fotos = pd.concat([df_fotos, df_f_new], ignore_index=True)
-                salvar_dados(df_fotos, ARQUIVO_FOTOS); st.rerun()
+                salvar_dados(df_fotos, ARQUIVO_FOTOS)
+                st.rerun()
     st.divider()
     cols = st.columns(4)
     for i, r in df_fotos.iterrows():
@@ -224,11 +238,16 @@ elif menu == "🖼️ BIBLIOTECA":
             if st.button("Remover", key=f"rm_{i}"):
                 df_fotos = df_fotos.drop(i); salvar_dados(df_fotos, ARQUIVO_FOTOS); st.rerun()
 
+# --- ABA LIXEIRA ---
 elif menu == "🗑️ LIXEIRA":
-    st.header("🗑️ Lixeira")
+    st.header("🗑️ Motores Excluídos")
     deletados = df_motores[df_motores['status'] == 'deletado']
+    if deletados.empty:
+        st.info("A lixeira está vazia.")
     for i, r in deletados.iterrows():
         col_l1, col_l2 = st.columns([3, 1])
-        col_l1.write(f"Motor: {r['Marca']} {r['Potencia_CV']} CV")
+        col_l1.write(f"Motor: **{r['Marca']}** - {r['Potencia_CV']} CV")
         if col_l2.button("Restaurar", key=f"res_{i}"):
-            df_motores.at[i, 'status'] = 'ativo'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+            df_motores.at[i, 'status'] = 'ativo'
+            salvar_dados(df_motores, ARQUIVO_CSV)
+            st.rerun()
