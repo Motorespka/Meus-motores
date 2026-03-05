@@ -1,0 +1,13 @@
+from core.database import executar
+
+def atualizar_estoque(item, qt_usada):
+    # Atualiza estoque
+    estoque = executar("SELECT atual, min_qt, max_qt FROM estoque WHERE item=?", (item,), fetch=True)
+    if not estoque:
+        return "Item não encontrado"
+    atual, min_qt, max_qt = estoque[0]
+    novo_atual = max(atual - qt_usada, 0)
+    executar("UPDATE estoque SET atual=? WHERE item=?", (novo_atual, item))
+    if novo_atual <= min_qt:
+        return f"Atenção! Estoque de {item} abaixo do mínimo ({novo_atual} < {min_qt})"
+    return f"Estoque atualizado: {item} = {novo_atual}"
