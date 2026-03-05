@@ -1,285 +1,367 @@
 import streamlit as st
 import pandas as pd
-import math
 import os
+import math
 
-st.set_page_config(page_title="Sistema de Rebobinagem", layout="wide")
+st.set_page_config(page_title="Pablo Motores PRO", layout="wide")
 
-ARQUIVO_MOTORES = "motores.csv"
+# =========================
+# ESTILO
+# =========================
 
-SENHA_MESTRE = "1234"
+st.markdown("""
+<style>
 
-COLUNAS = [
-"modelo",
-"fabricante",
-"potencia_cv",
-"tensao",
-"corrente",
-"rpm",
-"frequencia",
-"polos",
-"ranhuras",
-"bobinas",
-"espiras",
-"fio_mm",
-"ligacao",
-"observacoes"
-]
+body{
+background-color:#0e1117;
+}
 
-def carregar():
-    if os.path.exists(ARQUIVO_MOTORES):
-        return pd.read_csv(ARQUIVO_MOTORES)
-    else:
-        df = pd.DataFrame(columns=COLUNAS)
+h1,h2,h3{
+color:#00d4ff;
+}
 
-        exemplo = {
-        "modelo":"WEG W22",
-        "fabricante":"WEG",
-        "potencia_cv":5,
-        "tensao":220,
-        "corrente":14.2,
-        "rpm":1750,
-        "frequencia":60,
-        "polos":4,
-        "ranhuras":36,
-        "bobinas":12,
-        "espiras":40,
-        "fio_mm":1.25,
-        "ligacao":"Delta",
-        "observacoes":"Motor exemplo para testes"
-        }
+.stButton>button{
+background-color:#00d4ff;
+color:black;
+border-radius:8px;
+}
 
-        df.loc[len(df)] = exemplo
-        df.to_csv(ARQUIVO_MOTORES,index=False)
+</style>
+""", unsafe_allow_html=True)
 
-        return df
+# =========================
+# CONFIG
+# =========================
 
-def salvar(df):
-    df.to_csv(ARQUIVO_MOTORES,index=False)
+ARQUIVO = "motores.csv"
 
-df = carregar()
+TOKEN_PRO = "PABLO123"
+TOKEN_MESTRE = "MESTRE99"
 
-menu = st.sidebar.selectbox(
-"Menu",
-[
-"Dashboard",
-"Consultar motor",
-"Cadastrar motor",
-"Simulador de rebobinagem",
-"Modo mestre"
-]
-)
+# =========================
+# CRIAR BANCO
+# =========================
 
-def calcular_comprimento(espiras,bobinas,ranhuras):
-    perimetro = ranhuras * 0.02
-    return espiras * bobinas * perimetro
+if not os.path.exists(ARQUIVO):
 
-def calcular_peso(fio,comprimento):
+    df = pd.DataFrame([{
+        "Marca":"WEG",
+        "Potencia":"5",
+        "RPM":"1750",
+        "Voltagem":"220/380",
+        "Corrente":"14",
+        "Polos":"4",
+        "Ranhuras":"36",
+        "Espiras":"45",
+        "Bobinas":"12",
+        "Fio":"1.2",
+        "status":"ativo"
+    }])
+
+    df.to_csv(ARQUIVO,index=False)
+
+df = pd.read_csv(ARQUIVO)
+
+# =========================
+# FUNÇÕES
+# =========================
+
+def salvar():
+
+    df.to_csv(ARQUIVO,index=False)
+
+def espiras_por_polo(e,p):
+
+    if p==0:
+        return 0
+
+    return e/p
+
+def bobinas_por_fase(b):
+
+    return b/3
+
+def ranhuras_por_polo_fase(r,p):
+
+    if p==0:
+        return 0
+
+    return r/(p*3)
+
+def peso_cobre(fio,espiras):
 
     area = math.pi*(fio/2)**2
-    volume = area * comprimento
-    peso = volume * 8.96
-    return peso
 
-if menu == "Dashboard":
+    comprimento = espiras*0.15
 
-    st.title("Painel do Sistema")
+    volume = area*comprimento
 
-    c1,c2,c3 = st.columns(3)
+    densidade = 8.96
 
-    c1.metric("Motores cadastrados",len(df))
+    return volume*densidade
 
-    if len(df)>0:
-        c2.metric("Potência média CV",round(df["potencia_cv"].mean(),2))
-        c3.metric("RPM médio",round(df["rpm"].mean(),0))
+def sugerir_fio(c):
 
-    st.dataframe(df)
+    if c<=5:
+        return 0.8
+    if c<=10:
+        return 1.0
+    if c<=20:
+        return 1.3
+    if c<=30:
+        return 1.6
+    return 2.0
 
-if menu == "Consultar motor":
+def gerar_bobinagem(ranhuras,polos):
 
-    st.title("Consulta de motores")
+    lista=[]
 
-    busca = st.text_input("Buscar modelo")
+    passo=int(ranhuras/polos)
 
-    resultado = df[df["modelo"].str.contains(busca,case=False,na=False)]
+    for i in range(1,ranhuras+1):
 
-    st.dataframe(resultado)
+        fim=i+passo
 
-    if len(resultado)>0:
+        if fim>ranhuras:
+            fim=fim-ranhuras
 
-        motor = resultado.iloc[0]
+        lista.append((i,fim))
 
-        st.subheader("Dados técnicos")
+    return lista
 
-        col1,col2,col3 = st.columns(3)
+# =========================
+# LOGIN
+# =========================
 
-        col1.write("Potência CV:",motor["potencia_cv"])
-        col1.write("Tensão:",motor["tensao"])
-        col1.write("Corrente:",motor["corrente"])
+if "login" not in st.session_state:
 
-        col2.write("RPM:",motor["rpm"])
-        col2.write("Frequência:",motor["frequencia"])
-        col2.write("Polos:",motor["polos"])
+    st.title("Sistema Pablo Motores")
 
-        col3.write("Ranhuras:",motor["ranhuras"])
-        col3.write("Bobinas:",motor["bobinas"])
-        col3.write("Espiras:",motor["espiras"])
+    tipo=st.selectbox("Entrar como",["Cliente","Profissional","Mestre"])
 
-        comprimento = calcular_comprimento(
-        motor["espiras"],
-        motor["bobinas"],
-        motor["ranhuras"]
-        )
+    if tipo=="Cliente":
 
-        peso = calcular_peso(
-        motor["fio_mm"],
-        comprimento
-        )
+        if st.button("Entrar"):
 
-        st.subheader("Cálculos estimados")
+            st.session_state.login="cliente"
 
-        st.write("Comprimento fio (m):",round(comprimento,2))
-        st.write("Peso cobre (g):",round(peso,2))
-
-if menu == "Cadastrar motor":
-
-    st.title("Cadastro de motor")
-
-    with st.form("cadastro"):
-
-        modelo = st.text_input("Modelo")
-        fabricante = st.text_input("Fabricante")
-
-        c1,c2,c3 = st.columns(3)
-
-        potencia = c1.number_input("Potência CV",0.0)
-        tensao = c1.number_input("Tensão",0)
-
-        corrente = c2.number_input("Corrente",0.0)
-        rpm = c2.number_input("RPM",0)
-
-        frequencia = c3.number_input("Frequência",60)
-        polos = c3.number_input("Polos",4)
-
-        ranhuras = st.number_input("Ranhuras",0)
-        bobinas = st.number_input("Bobinas",0)
-        espiras = st.number_input("Espiras",0)
-
-        fio = st.number_input("Bitola fio mm",0.0)
-
-        ligacao = st.selectbox("Ligação",["Estrela","Delta"])
-
-        obs = st.text_area("Observações")
-
-        enviar = st.form_submit_button("Salvar")
-
-        if enviar:
-
-            novo = {
-            "modelo":modelo,
-            "fabricante":fabricante,
-            "potencia_cv":potencia,
-            "tensao":tensao,
-            "corrente":corrente,
-            "rpm":rpm,
-            "frequencia":frequencia,
-            "polos":polos,
-            "ranhuras":ranhuras,
-            "bobinas":bobinas,
-            "espiras":espiras,
-            "fio_mm":fio,
-            "ligacao":ligacao,
-            "observacoes":obs
-            }
-
-            df.loc[len(df)] = novo
-
-            salvar(df)
-
-            st.success("Motor cadastrado")
-
-if menu == "Simulador de rebobinagem":
-
-    st.title("Simulador de alteração")
-
-    modelo = st.selectbox("Motor base",df["modelo"])
-
-    motor = df[df["modelo"]==modelo].iloc[0]
-
-    espiras = st.number_input(
-    "Espiras",
-    value=int(motor["espiras"])
-    )
-
-    fio = st.number_input(
-    "Fio mm",
-    value=float(motor["fio_mm"])
-    )
-
-    bobinas = st.number_input(
-    "Bobinas",
-    value=int(motor["bobinas"])
-    )
-
-    comprimento = calcular_comprimento(
-    espiras,
-    bobinas,
-    motor["ranhuras"]
-    )
-
-    peso = calcular_peso(
-    fio,
-    comprimento
-    )
-
-    st.subheader("Resultado da simulação")
-
-    st.write("Comprimento fio:",round(comprimento,2))
-    st.write("Peso cobre:",round(peso,2))
-
-    st.info("Simulação não salva no banco")
-
-if menu == "Modo mestre":
-
-    st.title("Modo mestre")
-
-    senha = st.text_input("Senha",type="password")
-
-    if senha == SENHA_MESTRE:
-
-        st.success("Acesso liberado")
-
-        motor = st.selectbox("Motor",df["modelo"])
-
-        indice = df[df["modelo"]==motor].index[0]
-
-        novo_modelo = st.text_input(
-        "Modelo",
-        df.loc[indice,"modelo"]
-        )
-
-        nova_pot = st.number_input(
-        "Potência",
-        value=float(df.loc[indice,"potencia_cv"])
-        )
-
-        if st.button("Salvar edição"):
-
-            df.loc[indice,"modelo"] = novo_modelo
-            df.loc[indice,"potencia_cv"] = nova_pot
-
-            salvar(df)
-
-            st.success("Editado")
-
-        if st.button("Excluir motor"):
-
-            df.drop(indice,inplace=True)
-
-            salvar(df)
-
-            st.success("Motor excluído")
+            st.rerun()
 
     else:
-        st.warning("Acesso restrito")
-        
+
+        senha=st.text_input("Token",type="password")
+
+        if st.button("Entrar"):
+
+            if tipo=="Profissional" and senha==TOKEN_PRO:
+
+                st.session_state.login="pro"
+
+                st.rerun()
+
+            elif tipo=="Mestre" and senha==TOKEN_MESTRE:
+
+                st.session_state.login="mestre"
+
+                st.rerun()
+
+            else:
+
+                st.error("Token errado")
+
+    st.stop()
+
+perfil=st.session_state.login
+
+# =========================
+# MENU
+# =========================
+
+menu=["Consulta","Gerador Bobinagem","Dashboard"]
+
+if perfil in ["pro","mestre"]:
+
+    menu.append("Cadastrar Motor")
+
+if perfil=="mestre":
+
+    menu.append("Lixeira")
+
+op=st.sidebar.radio("Menu",menu)
+
+# =========================
+# CONSULTA
+# =========================
+
+if op=="Consulta":
+
+    busca=st.text_input("Buscar motor")
+
+    df2=df[df["status"]!="deletado"]
+
+    if busca:
+
+        df2=df2[df2.apply(lambda r:r.astype(str).str.contains(busca,case=False).any(),axis=1)]
+
+    for i,row in df2.iterrows():
+
+        with st.expander(f"{row['Marca']} {row['Potencia']}CV"):
+
+            c1,c2=st.columns(2)
+
+            with c1:
+
+                st.write("Voltagem:",row["Voltagem"])
+                st.write("RPM:",row["RPM"])
+                st.write("Corrente:",row["Corrente"])
+
+            with c2:
+
+                st.write("Polos:",row["Polos"])
+                st.write("Ranhuras:",row["Ranhuras"])
+
+            st.subheader("Cálculos")
+
+            epp=espiras_por_polo(int(row["Espiras"]),int(row["Polos"]))
+            bpf=bobinas_por_fase(int(row["Bobinas"]))
+            q=ranhuras_por_polo_fase(int(row["Ranhuras"]),int(row["Polos"]))
+
+            st.write("Espiras por polo:",round(epp,2))
+            st.write("Bobinas por fase:",round(bpf,2))
+            st.write("Ranhuras por polo por fase:",round(q,2))
+
+            fio=float(row["Fio"])
+
+            peso=peso_cobre(fio,int(row["Espiras"]))
+
+            st.write("Peso estimado cobre:",round(peso,2),"g")
+
+            corrente=float(row["Corrente"])
+
+            st.write("Fio sugerido:",sugerir_fio(corrente),"mm")
+
+            if perfil=="mestre":
+
+                st.subheader("Editar")
+
+                novo_fio=st.text_input("Fio",row["Fio"],key=i)
+
+                if st.button("Salvar",key="s"+str(i)):
+
+                    df.at[i,"Fio"]=novo_fio
+
+                    salvar()
+
+                    st.rerun()
+
+                if st.button("Excluir",key="d"+str(i)):
+
+                    df.at[i,"status"]="deletado"
+
+                    salvar()
+
+                    st.rerun()
+
+# =========================
+# CADASTRAR
+# =========================
+
+if op=="Cadastrar Motor":
+
+    st.title("Cadastrar Motor")
+
+    marca=st.text_input("Marca")
+
+    pot=st.text_input("Potencia CV")
+
+    rpm=st.text_input("RPM")
+
+    vol=st.text_input("Voltagem")
+
+    cor=st.text_input("Corrente")
+
+    polos=st.text_input("Polos")
+
+    ran=st.text_input("Ranhuras")
+
+    esp=st.text_input("Espiras")
+
+    bob=st.text_input("Bobinas")
+
+    fio=st.text_input("Fio")
+
+    if st.button("Salvar"):
+
+        novo=pd.DataFrame([{
+
+        "Marca":marca,
+        "Potencia":pot,
+        "RPM":rpm,
+        "Voltagem":vol,
+        "Corrente":cor,
+        "Polos":polos,
+        "Ranhuras":ran,
+        "Espiras":esp,
+        "Bobinas":bob,
+        "Fio":fio,
+        "status":"ativo"
+
+        }])
+
+        df=pd.concat([df,novo])
+
+        salvar()
+
+        st.success("Motor salvo")
+
+# =========================
+# GERADOR
+# =========================
+
+if op=="Gerador Bobinagem":
+
+    st.title("Gerador de Bobinagem")
+
+    r=st.number_input("Ranhuras",6,120,24)
+
+    p=st.number_input("Polos",2,12,4)
+
+    if st.button("Gerar"):
+
+        lista=gerar_bobinagem(r,p)
+
+        for i,b in enumerate(lista):
+
+            st.write(f"Bobina {i+1} → {b[0]} - {b[1]}")
+
+# =========================
+# DASHBOARD
+# =========================
+
+if op=="Dashboard":
+
+    st.title("Dashboard")
+
+    st.metric("Motores cadastrados",len(df[df["status"]!="deletado"]))
+
+    st.bar_chart(df["Polos"].value_counts())
+
+# =========================
+# LIXEIRA
+# =========================
+
+if op=="Lixeira":
+
+    lixo=df[df["status"]=="deletado"]
+
+    for i,row in lixo.iterrows():
+
+        st.write(row["Marca"],row["Potencia"])
+
+        if st.button("Restaurar",key=i):
+
+            df.at[i,"status"]="ativo"
+
+            salvar()
+
+            st.rerun()
