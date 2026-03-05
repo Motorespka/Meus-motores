@@ -1,0 +1,27 @@
+import streamlit as st
+import pandas as pd
+from core.database import carregar, salvar
+
+st.title("🛒 Fornecedores")
+
+df = carregar("fornecedores.csv")
+
+nome = st.text_input("Fornecedor")
+produto = st.text_input("Produto")
+preco = st.number_input("Preço")
+estoque = st.number_input("Estoque")
+
+if st.button("Cadastrar"):
+
+    novo = pd.DataFrame([{
+        "nome":nome,
+        "produto":produto,
+        "preco":preco,
+        "estoque":estoque
+    }])
+
+    df = pd.concat([df,novo], ignore_index=True)
+
+    salvar(df,"fornecedores.csv")
+
+    st.success("Fornecedor cadastrado")

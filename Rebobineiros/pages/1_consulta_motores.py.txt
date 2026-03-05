@@ -1,0 +1,22 @@
+import streamlit as st
+import pandas as pd
+from core.database import carregar
+
+st.title("🔍 Consulta de Motores")
+
+df = carregar("motores.csv")
+
+if df.empty:
+    st.warning("Nenhum motor cadastrado.")
+else:
+
+    busca = st.text_input("Buscar motor")
+
+    if busca:
+
+        df = df[df.apply(
+            lambda r: r.astype(str).str.contains(busca, case=False).any(),
+            axis=1
+        )]
+
+    st.dataframe(df)

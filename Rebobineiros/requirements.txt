@@ -1,0 +1,36 @@
+# Interface web / desktop
+streamlit>=1.25.0            # interface principal do site
+PyQt5>=5.15.10                # opcional, para interface desktop profissional
+
+# Banco de dados e ORM
+SQLAlchemy>=2.0.0             # abstração de banco (PostgreSQL/MySQL/SQLite)
+psycopg2-binary>=2.9.9        # driver PostgreSQL
+PyMySQL>=1.1.0                 # driver MySQL
+sqlite3                        # já incluído no Python, para testes
+
+# Manipulação de dados
+pandas>=2.0.0                  # manipulação de tabelas e dados de motores
+numpy>=1.26.0                  # cálculos numéricos
+
+# Segurança
+bcrypt>=4.1.0                  # hash de senhas
+python-dotenv>=1.1.0           # variáveis de ambiente para tokens e credenciais
+
+# Integração e APIs externas
+requests>=2.32.0               # comunicação com APIs externas
+aiohttp>=3.9.3                 # requisições assíncronas, útil para rotas ou WhatsApp
+twilio>=8.3.3                  # integração opcional com WhatsApp / SMS
+
+# Otimização e IA
+scikit-learn>=1.3.0            # cálculo de rotas e previsão de tempo
+geopy>=2.4.0                   # geolocalização e cálculo de distância
+networkx>=3.2.0                # rotas e grafos para otimização
+matplotlib>=3.9.0              # visualização de dados
+
+# Testes e logs
+pytest>=8.2.0                  # testes automáticos de funções críticas
+loguru>=0.7.0                  # logs avançados
+
+# Outras utilidades
+python-multipart>=0.0.6        # uploads de arquivos no Streamlit / web
+validators>=1.4.0              # validação de URLs e dados
