@@ -1,46 +1,89 @@
+# app.py
 import streamlit as st
-import pandas as pd
 import os
 
-# 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Inventário de Motores", layout="centered")
+# Configuração da página
+st.set_page_config(
+    page_title="Pablo Motores Pro",
+    page_icon="⚙️",
+    layout="wide"
+)
 
-st.title("🔌 Painel de Motores")
+# --- Sessão de login simples (exemplo) ---
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+    st.session_state['perfil'] = None
 
-# 2. NOME DO ARQUIVO
-# Se estiver no PC, use o caminho completo: r'C:\Users\pablo\Desktop\tentativa site motore\meubancodedados.csv'
-# Se estiver no GitHub/Nuvem, use apenas: 'meubancodedados.csv'
-ARQUIVO_CSV = 'meubancodedados.csv' 
+# --- TELA DE LOGIN ---
+if not st.session_state['autenticado']:
+    st.title("⚙️ Sistema Pablo Motores")
+    tipo = st.selectbox("Entrar como:", ["Cliente", "Profissional", "Mestre"])
+    token_input = ""
+    if tipo != "Cliente":
+        token_input = st.text_input("Token:", type="password")
 
-# 3. LÓGICA DO SITE
-if os.path.exists(ARQUIVO_CSV):
-    # Carrega os dados
-    df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig')
+    if st.button("Entrar"):
+        if tipo == "Cliente":
+            st.session_state['autenticado'] = True
+            st.session_state['perfil'] = 'cliente'
+            st.experimental_rerun()
+        elif tipo == "Profissional" and token_input == "PABLO123":
+            st.session_state['autenticado'] = True
+            st.session_state['perfil'] = 'pro'
+            st.experimental_rerun()
+        elif tipo == "Mestre" and token_input == "MESTRE99":
+            st.session_state['autenticado'] = True
+            st.session_state['perfil'] = 'mestre'
+            st.experimental_rerun()
+        else:
+            st.error("Token incorreto")
+    st.stop()  # Para não mostrar nada abaixo se não logado
 
-    # Campo de busca rápida
-    busca = st.text_input("🔍 Buscar Modelo ou Marca")
-    
-    # Filtra os dados conforme você digita
-    if busca:
-        mask = df.apply(lambda row: busca.lower() in str(row).lower(), axis=1)
-        df_filtrado = df[mask]
-    else:
-        df_filtrado = df
+# --- INTERFACE PRINCIPAL ---
+st.title("⚙️ Pablo Motores PRO")
+st.markdown("""
+Sistema profissional para:
 
-    st.write(f"Exibindo **{len(df_filtrado)}** motor(es)")
+🔧 Rebobinadores  
+🔩 Mecânicos  
+⚙️ Tornearia  
+📦 Controle de estoque  
+🧾 Ordem de serviço  
+🛒 Fornecedores
+""")
+st.info("Use o menu lateral para navegar pelo sistema.")
 
-    # Exibe cada motor em um "Card" (melhor para a tela do celular)
-    for index, row in df_filtrado.iterrows():
-        with st.expander(f"📦 {row['Marca']} - {row['Modelo']}"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**RPM:** {row['RPM']}")
-                st.write(f"**Tensão:** {row['Tensao']}")
-            with col2:
-                st.write(f"**Amperagem:** {row['Amperagem']}")
-            
-            st.markdown("---")
-            st.caption("Texto extraído da placa:")
-            st.text(row['Texto_Completo'])
-else:
-    st.error(f"Arquivo '{ARQUIVO_CSV}' não encontrado. Verifique se o nome está correto!")
+# --- MENU LATERAL ---
+menu = ["Dashboard", "Rebobinagem", "Mecânica", "Tornearia", "Estoque", "OS", "Fornecedores"]
+escolha = st.sidebar.radio(f"Acesso: {st.session_state['perfil'].upper()}", menu)
+
+# --- ABAS SIMPLES ---
+if escolha == "Dashboard":
+    st.subheader("📊 Dashboard geral")
+    st.write("Resumo do sistema (indicadores, notificações, alertas).")
+
+elif escolha == "Rebobinagem":
+    st.subheader("🔧 Rebobinagem")
+    st.write("Tela de cadastro e edição de motores para rebobinadores.")
+
+elif escolha == "Mecânica":
+    st.subheader("🔩 Mecânica")
+    st.write("Tela de cadastro de peças, manutenção e serviços de mecânica.")
+
+elif escolha == "Tornearia":
+    st.subheader("⚙️ Tornearia")
+    st.write("Cadastro e controle de serviços de tornearia.")
+
+elif escolha == "Estoque":
+    st.subheader("📦 Estoque")
+    st.write("Controle de itens, baixas e fornecedores.")
+
+elif escolha == "OS":
+    st.subheader("🧾 Ordens de Serviço")
+    st.write("Criação, alteração e envio de ordens de serviço.")
+
+elif escolha == "Fornecedores":
+    st.subheader("🛒 Fornecedores")
+    st.write("Cadastro de fornecedores, itens, preços e entregas.")
+
+# Rodando isso como app.py já funciona no Streamlit Cloud
